@@ -7,14 +7,24 @@ a test object store.
 
 ## Repos
 
-| Local path | GitHub | Work branch | Role |
-|---|---|---|---|
-| `/Users/aursu/workspace/code/minio` | `aursu/minio` | `full-console` | server; holds all notes |
-| `/Users/aursu/workspace/code/console` | `aursu/console` | `full-console` (from `v1.7.6`) | web console, Go module `github.com/minio/console` |
-| `/Users/aursu/workspace/code/mds` | `aursu/mds` | — (`v1.0.4` pinned) | UI component library |
+| Local path | GitHub | Role |
+|---|---|---|
+| `/Users/aursu/workspace/code/minio` | `aursu/minio` (GitHub fork of `minio/minio`) | server; holds all notes |
+| `/Users/aursu/workspace/code/console` | `aursu/console` | web console, Go module `github.com/minio/console`; full console restored from `v1.7.6` |
+| `/Users/aursu/workspace/code/mds` | `aursu/mds` | UI component library, `v1.0.4` pinned, no changes planned |
 
-`master` in each repo mirrors upstream (the original history) and is never
-committed to. Upstream `console` and `mds` no longer exist on GitHub.
+Upstream `console` and `mds` no longer exist on GitHub; their original history
+is in these repos (see [fork/memory/](fork/memory/)).
+
+## Branches and pull requests
+
+- `master` is the only long-lived branch in every repo.
+- Every change reaches `master` through a PR from a short-lived branch,
+  deleted after merge. No direct pushes to `master`.
+- `aursu/minio` is a GitHub fork: PRs must target `aursu/minio:master`, not
+  `minio/minio`.
+- Cherry-pick original commits with `-x`; merge PRs with a merge commit or
+  rebase, never squash.
 
 All notes, memory and rules for this fork live **in this repo**, under
 [fork/](fork/). Read [fork/memory/MEMORY.md](fork/memory/MEMORY.md) at the start

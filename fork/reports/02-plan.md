@@ -2,6 +2,9 @@
 
 Date: 2026-11-19. Builds on [01-feasibility](01-feasibility.md).
 
+> Superseded by [04-plan-final-build](04-plan-final-build.md): single
+> `master` branch, changes via PRs, final build before security fixes.
+
 ## Bases
 
 | Repo | Work branch | Cut from | Why |
