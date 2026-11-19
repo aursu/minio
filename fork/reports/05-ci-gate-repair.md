@@ -62,7 +62,9 @@ review.
 - **vulncheck (Analysis).** Go standard library vulnerabilities; resolved by
   the Go upgrade in plan step 2.2.
 - **mint.** Needs a self-hosted runner named `mint`, which the fork does not
-  have. The job stays queued. It should be disabled in the Actions UI.
+  have, so its runs stayed queued forever. **Disabled 2026-11-19** through the
+  API (`gh workflow disable mint.yml`), and its queued runs were cancelled.
+  Re-enable with `gh workflow enable mint.yml --repo aursu/minio`.
 
 ## Lessons
 
@@ -79,7 +81,7 @@ review.
 ## Next
 
 1. Merge #16 and confirm a full CI run on master's state.
-2. Disable `mint` in the Actions UI.
+2. ~~Disable `mint`~~: done 2026-11-19.
 3. Open question: an upgrade check from `RELEASE.2025-03-12` (the version
    actually deployed) to this tree. It needs the user's answer on whether data
    on that version will move to the fork.
