@@ -27,6 +27,8 @@ jobs:
         old:
           - version: RELEASE.2019-12-19T22-52-26Z
             commit: 586614c73f902085465d07a1f854ca6c1efb9845
+          - version: RELEASE.2024-10-13T13-34-11Z
+            commit: d10bb7e1b667c2df72c394ef1fa52ab4a6802d0f
           - version: RELEASE.2025-03-12T18-04-18Z
             commit: dbf31af6cb0d5ea33b277b6e461cfea98262778e
 
