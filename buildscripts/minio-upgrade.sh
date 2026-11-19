@@ -60,6 +60,20 @@ add_alias() {
 	sleep 20
 }
 
+OLD_VERSION=RELEASE.2019-12-19T22-52-26Z
+OLD_COMMIT=586614c73f902085465d07a1f854ca6c1efb9845
+
+# The old images are gone from Docker Hub and Quay: build the release from
+# source and wrap it with the repo Dockerfile, tagged as compose.yml expects.
+build_old_release_image() {
+	local context
+	context="$(mktemp -d)"
+	"${BASH_SOURCE[0]%/*}/install-minio-release.sh" "${OLD_VERSION}" "${OLD_COMMIT}" "${context}/minio" || exit 1
+	cp -r dockerscripts "${context}/"
+	docker build -q -t "minio/minio:${OLD_VERSION}" -f Dockerfile "${context}" || exit 1
+	rm -rf "${context}"
+}
+
 __init__() {
 	sudo apt install curl -y
 	export GOPATH=/tmp/gopath
@@ -77,8 +91,9 @@ __init__() {
 	cleanup
 
 	TAG=minio/minio:dev make docker
+	build_old_release_image
 
-	MINIO_VERSION=RELEASE.2019-12-19T22-52-26Z docker-compose \
+	MINIO_VERSION=${OLD_VERSION} docker-compose \
 		-f "buildscripts/upgrade-tests/compose.yml" \
 		up -d --build
 
