@@ -81,17 +81,7 @@ function test_minio_with_timeout() {
 	mkdir ${WORK_DIR}
 	C_PWD=${PWD}
 	if [ ! -x "$PWD/mc" ]; then
-		MC_BUILD_DIR="mc-$RANDOM"
-		if ! git clone --quiet https://github.com/minio/mc "$MC_BUILD_DIR"; then
-			echo "failed to download https://github.com/minio/mc"
-			purge "${MC_BUILD_DIR}"
-			exit 1
-		fi
-
-		(cd "${MC_BUILD_DIR}" && go build -o "$C_PWD/mc")
-
-		# remove mc source.
-		purge "${MC_BUILD_DIR}"
+		"${BASH_SOURCE[0]%/*}/install-mc.sh" "$C_PWD/mc" || exit 1
 	fi
 
 	"${MINIO[@]}" --address ":$start_port" --read-header-timeout ${srv_hdr_timeout}s --idle-timeout ${srv_idle_timeout}s "${WORK_DIR}/disk/" >"${WORK_DIR}/server1.log" 2>&1 &

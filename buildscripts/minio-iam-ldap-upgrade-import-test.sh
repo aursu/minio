@@ -31,7 +31,7 @@ __init__() {
 		echo "mc is already installed"
 	else
 		echo "Installing mc:"
-		go install github.com/minio/mc@latest
+		"${BASH_SOURCE[0]%/*}/install-mc.sh" "$(go env GOPATH)/bin/mc" || exit 1
 	fi
 
 	if [ ! -x ./minio.${OLD_VERSION} ]; then
