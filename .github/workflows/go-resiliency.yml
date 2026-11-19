@@ -21,7 +21,7 @@ jobs:
     strategy:
       matrix:
         go-version: [1.24.x]
-        os: [ubuntu-latest]
+        os: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -29,7 +29,7 @@ jobs:
           go-version: ${{ matrix.go-version }}
           check-latest: true
       - name: Build on ${{ matrix.os }}
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-24.04'
         env:
           CGO_ENABLED: 0
           GO111MODULE: on
