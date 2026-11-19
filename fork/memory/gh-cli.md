@@ -13,7 +13,8 @@ available from 2026-11-19.
 kept in `~/.config/gh/hosts.yml` on the host. It never goes into an image, a
 repo or a log. **It is dedicated to this project:** `aursu/minio`,
 `aursu/console` and `aursu/mds`. Its permissions are Contents R, Pull requests
-RW, Actions R and Commit statuses R. `git push` stays on the host over SSH.
+RW, Actions RW and Commit statuses R (Actions RW verified 2026-11-19: a
+cancel on a completed run returns 409, not 403). `git push` stays on the host over SSH.
 Never print the token: `gh auth status` masks it.
 
 Check that it works:
