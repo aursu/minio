@@ -9,9 +9,9 @@
 
 # MinIO Quickstart Guide
 
-[![Slack](https://slack.min.io/slack?type=svg)](https://slack.min.io) [![Docker Pulls](https://img.shields.io/docker/pulls/minio/minio.svg?maxAge=604800)](https://hub.docker.com/r/minio/minio/) [![license](https://img.shields.io/badge/license-AGPL%20V3-blue)](https://github.com/minio/minio/blob/master/LICENSE)
+[![license](https://img.shields.io/badge/license-AGPL%20V3-blue)](LICENSE)
 
-[![MinIO](https://raw.githubusercontent.com/minio/minio/master/.github/logo.svg?sanitize=true)](https://min.io)
+[![MinIO](.github/logo.svg)](https://min.io)
 
 MinIO is a high-performance, S3-compatible object storage solution released under the GNU AGPL v3.0 license.
 Designed for speed and scalability, it powers AI/ML, analytics, and data-intensive workloads with industry-leading performance.
@@ -30,7 +30,7 @@ We designed MinIO as Open Source software for the Open Source software community
 All usage of MinIO in your application stack requires validation against AGPLv3 obligations, which include but are not limited to the release of modified code to the community from which you have benefited. Any commercial/proprietary usage of the AGPLv3 software, including repackaging or reselling services/features, is done at your own risk.
 
 The AGPLv3 provides no obligation by any party to support, maintain, or warranty the original or any modified work.
-All support is provided on a best-effort basis through Github and our [Slack](https://slack.min.io) channel, and any member of the community is welcome to contribute and assist others in their usage of the software.
+All support is provided on a best-effort basis through GitHub, and any member of the community is welcome to contribute and assist others in their usage of the software.
 
 MinIO [AIStor](https://www.min.io/product/aistor) includes enterprise-grade support and licensing for workloads which require commercial or proprietary usage and production-level SLA/SLO-backed support. For more information, [reach out for a quote](https://min.io/pricing).
 
@@ -51,15 +51,15 @@ See the sections below for detailed instructions on each method.
 
 Historical pre-compiled binary releases remain available for reference but are no longer maintained:
 
-- GitHub Releases: https://github.com/minio/minio/releases
-- Direct downloads: https://dl.min.io/server/minio/release/
+- GitHub Releases (release notes): https://github.com/minio/minio/releases
+- Direct downloads from `dl.min.io` were withdrawn (HTTP 410), and the `minio/minio` images were removed from Docker Hub.
 
 **These legacy binaries will not receive updates.** We strongly recommend using source builds for access to the latest features, bug fixes, and security updates.
 
 ## Install from Source
 
 Use the following commands to compile and run a standalone MinIO server from source.
-If you do not have a working Golang environment, please follow [How to install Golang](https://golang.org/doc/install). Minimum version required is [go1.24](https://golang.org/dl/#stable)
+If you do not have a working Golang environment, please follow [How to install Golang](https://go.dev/doc/install). Minimum version required is [go1.24](https://go.dev/dl/#stable)
 
 ```sh
 go install github.com/minio/minio@latest
@@ -87,7 +87,7 @@ mc admin info local
 ```
 
 See [Test using MinIO Client `mc`](#test-using-minio-client-mc) for more information on using the `mc` commandline tool.
-For application developers, see <https://docs.min.io/enterprise/aistor-object-store/developers/sdk/> to view MinIO SDKs for supported languages.
+For application developers, see [MinIO SDKs](https://github.com/minio/docs/blob/main/source/developers/minio-drivers.rst) to view MinIO SDKs for supported languages.
 
 > [!NOTE]
 > Production environments using compiled-from-source MinIO binaries do so at their own risk.
@@ -114,16 +114,16 @@ docker run -p 9000:9000 -p 9001:9001 myminio:minio server /tmp/minio --console-a
 Complete documentation for building Docker containers, managing custom images, or loading images into orchestration platforms is out of scope for this documentation.
 You can modify the `Dockerfile` and `dockerscripts/docker-entrypoint.sh` as-needed to reflect your specific image requirements.
 
-See the [MinIO Container](https://docs.min.io/community/minio-object-store/operations/deployments/baremetal-deploy-minio-as-a-container.html#deploy-minio-container) documentation for more guidance on running MinIO within a Container image.
+See the [MinIO Container](https://github.com/minio/docs/blob/main/source/operations/deployments/baremetal-deploy-minio-as-a-container.rst) documentation for more guidance on running MinIO within a Container image.
 
 ## Install using Helm Charts
 
 There are two paths for installing MinIO onto Kubernetes infrastructure:
 
 - Use the [MinIO Operator](https://github.com/minio/operator)
-- Use the community-maintained [Helm charts](https://github.com/minio/minio/tree/master/helm/minio)
+- Use the community-maintained [Helm charts](helm/minio)
 
-See the [MinIO Documentation](https://docs.min.io/community/minio-object-store/operations/deployments/kubernetes.html) for guidance on deploying using the Operator.
+See the [MinIO Documentation](https://github.com/minio/docs/blob/main/source/operations/deployments/kubernetes.rst) for guidance on deploying using the Operator.
 The Community Helm chart has instructions in the folder-level README.
 
 ## Test MinIO Connectivity
@@ -150,21 +150,21 @@ mc cp ~/Downloads/mydata data/
 mc ls data/
 ```
 
-Follow the MinIO Client [Quickstart Guide](https://docs.min.io/community/minio-object-store/reference/minio-mc.html#quickstart) for further instructions.
+Follow the MinIO Client [Quickstart Guide](https://github.com/minio/docs/blob/main/source/reference/minio-mc.rst) for further instructions.
 
 ## Explore Further
 
-- [The MinIO documentation website](https://docs.min.io/community/minio-object-store/index.html)
-- [MinIO Erasure Code Overview](https://docs.min.io/community/minio-object-store/operations/concepts/erasure-coding.html)
-- [Use `mc` with MinIO Server](https://docs.min.io/community/minio-object-store/reference/minio-mc.html)
-- [Use `minio-go` SDK with MinIO Server](https://docs.min.io/enterprise/aistor-object-store/developers/sdk/go/)
+- [The MinIO documentation sources](https://github.com/minio/docs/blob/main/source/index.rst)
+- [MinIO Erasure Code Overview](https://github.com/minio/docs/blob/main/source/operations/concepts/erasure-coding.rst)
+- [Use `mc` with MinIO Server](https://github.com/minio/docs/blob/main/source/reference/minio-mc.rst)
+- [Use `minio-go` SDK with MinIO Server](https://github.com/minio/docs/blob/main/source/developers/go/minio-go.rst)
 
 ## Contribute to MinIO Project
 
-Please follow MinIO [Contributor's Guide](https://github.com/minio/minio/blob/master/CONTRIBUTING.md) for guidance on making new contributions to the repository.
+Please follow MinIO [Contributor's Guide](CONTRIBUTING.md) for guidance on making new contributions to the repository.
 
 ## License
 
-- MinIO source is licensed under the [GNU AGPLv3](https://github.com/minio/minio/blob/master/LICENSE).
-- MinIO [documentation](https://github.com/minio/minio/tree/master/docs) is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-- [License Compliance](https://github.com/minio/minio/blob/master/COMPLIANCE.md)
+- MinIO source is licensed under the [GNU AGPLv3](LICENSE).
+- MinIO [documentation](docs) is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- [License Compliance](COMPLIANCE.md)
