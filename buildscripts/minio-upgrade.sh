@@ -80,8 +80,14 @@ add_alias() {
 	sleep 20
 }
 
-OLD_VERSION=RELEASE.2019-12-19T22-52-26Z
-OLD_COMMIT=586614c73f902085465d07a1f854ca6c1efb9845
+# The release the upgrade starts from. CI runs a matrix over versions in use
+# (upgrade-ci-cd.yaml); set both together - the commit is the tag's target.
+if [ -n "${OLD_VERSION:-}${OLD_COMMIT:-}" ] && { [ -z "${OLD_VERSION:-}" ] || [ -z "${OLD_COMMIT:-}" ]; }; then
+	echo "set OLD_VERSION and OLD_COMMIT together"
+	exit 1
+fi
+OLD_VERSION="${OLD_VERSION:-RELEASE.2019-12-19T22-52-26Z}"
+OLD_COMMIT="${OLD_COMMIT:-586614c73f902085465d07a1f854ca6c1efb9845}"
 
 # The old images are gone from Docker Hub and Quay: build the release from
 # source and wrap it with the repo Dockerfile, tagged as compose.yml expects.
