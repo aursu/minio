@@ -34,9 +34,14 @@ Date: 2026-11-19. Supersedes [02-plan](02-plan.md); facts from
     2026-11-19. `quay.io/minio/dex` (amd64, built 2024-05-15) and
     `quay.io/minio/openldap` (amd64, built 2025-05-13, seeded test directory)
     are still there and both the console SSO test and upstream
-    `iam-integrations.yaml` depend on them. Copy them by digest, unchanged,
-    to `ghcr.io/aursu/` and point our tests and CI there. `mc` is built from
-    source (`github.com/minio/mc`).
+    `iam-integrations.yaml` depend on them. **Done 2026-11-19** (Alexander):
+    `ghcr.io/aursu/minio/{dex,openldap}:latest`, verified identical to the
+    Quay originals; plus copies of the last official server
+    (`RELEASE.2025-03-12T18-04-18Z`, embeds console v1.7.6) and `mc`
+    (`RELEASE.2025-08-13T08-35-41Z`). All public. Tests and CI point there —
+    see [minio-images-removed](../memory/minio-images-removed.md).
+    AIStor images are not used anywhere (proprietary evaluation licence, no
+    reverse engineering): [aistor-not-usable](../memory/aistor-not-usable.md).
 0.1 Test harness in `fork/test/`: the unit recipe from report 03, console
     integration, SSO integration (Dex + OpenLDAP from 0.0). One command each,
     exit status = pass/fail. Run on the unchanged tree: must match the
