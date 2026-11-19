@@ -1,26 +1,31 @@
-## Community Contribution License
-All community contributions in this pull request are licensed to the project maintainers
-under the terms of the [Apache 2 license](https://www.apache.org/licenses/LICENSE-2.0). 
-By creating this pull request I represent that I have the right to license the 
-contributions to the project maintainers under the Apache 2 license.
+<!--
+Target: aursu/minio:master. This repo is a GitHub fork; make sure the base
+repository is NOT minio/minio.
+-->
 
-## Description
+## What
 
+<!-- The change in one or two sentences. One PR = one reviewable unit. -->
 
-## Motivation and Context
+## Why
 
+<!-- The problem it solves; link the plan step or advisory (fork/reports/…). -->
 
-## How to test this PR?
+## Why not the obvious alternative
 
+## Source
 
-## Types of changes
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Optimization (provides speedup with no functional changes)
-- [ ] Breaking change (fix or feature that would cause existing functionality to change)
+- [ ] original upstream code (cherry-picked with `-x`, or a pin to an original commit)
+- [ ] our own code (fork-only change)
+- [ ] mechanical output (generated files, bundle, `go.sum`) — how to reproduce:
 
-## Checklist:
-- [ ] Fixes a regression (If yes, please add `commit-id` or `PR #` here)
-- [ ] Unit tests added/updated
-- [ ] Internal documentation updated
-- [ ] Create a documentation update request [here](https://github.com/minio/docs/issues/new?label=doc-change,title=Doc+Updated+Needed+For+PR+github.com%2fminio%2fminio%2fpull%2fNNNNN)
+## Tests
+
+<!-- What ran and the result, compared with the baseline (fork/reports/03-baseline.md).
+     For a security fix: the regression test that fails without the change. -->
+
+## Checklist
+
+- [ ] Development note in `fork/notes/` (code changes)
+- [ ] No secrets in the diff
+- [ ] Merge with a merge commit or rebase — not squash
