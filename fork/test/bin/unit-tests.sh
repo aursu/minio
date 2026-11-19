@@ -30,7 +30,7 @@ main() {
     : "${TEST_RESULTS_DIR:?set TEST_RESULTS_DIR in $env_file}"
 
     local packages=("$@")
-    [[ ${#packages[@]} -gt 0 ]] || packages=(./...)
+    [[ ${#packages[@]} -gt 0 ]] || packages=("./...")  # Go pattern: every package
 
     mkdir -p "$TEST_RESULTS_DIR"
     local log_file
