@@ -30,17 +30,7 @@ function start_minio_4drive() {
 	mkdir ${WORK_DIR}
 	C_PWD=${PWD}
 	if [ ! -x "$PWD/mc" ]; then
-		MC_BUILD_DIR="mc-$RANDOM"
-		if ! git clone --quiet https://github.com/minio/mc "$MC_BUILD_DIR"; then
-			echo "failed to download https://github.com/minio/mc"
-			purge "${MC_BUILD_DIR}"
-			exit 1
-		fi
-
-		(cd "${MC_BUILD_DIR}" && go build -o "$C_PWD/mc")
-
-		# remove mc source.
-		purge "${MC_BUILD_DIR}"
+		"${BASH_SOURCE[0]%/*}/install-mc.sh" "$C_PWD/mc" || exit 1
 	fi
 
 	"${MINIO[@]}" --address ":$start_port" "${WORK_DIR}/disk{1...4}" >"${WORK_DIR}/server1.log" 2>&1 &

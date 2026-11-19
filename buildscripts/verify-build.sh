@@ -219,28 +219,13 @@ function __init__() {
 	mkdir -p "$MINIO_CONFIG_DIR"
 	mkdir -p "$MINT_DATA_DIR"
 
-	MC_BUILD_DIR="mc-$RANDOM"
-	if ! git clone --quiet https://github.com/minio/mc "$MC_BUILD_DIR"; then
-		echo "failed to download https://github.com/minio/mc"
-		purge "${MC_BUILD_DIR}"
-		exit 1
-	fi
-
-	(cd "${MC_BUILD_DIR}" && go build -o "${WORK_DIR}/mc")
-
-	# remove mc source.
-	purge "${MC_BUILD_DIR}"
+	"${BASH_SOURCE[0]%/*}/install-mc.sh" "${WORK_DIR}/mc" "$FUNCTIONAL_TESTS" || exit 1
 
 	shred -n 1 -s 1M - 1>"$FILE_1_MB" 2>/dev/null
 	shred -n 1 -s 65M - 1>"$FILE_65_MB" 2>/dev/null
 
 	## version is purposefully set to '3' for minio to migrate configuration file
 	echo '{"version": "3", "credential": {"accessKey": "minio", "secretKey": "minio123"}, "region": "us-east-1"}' >"$MINIO_CONFIG_DIR/config.json"
-
-	if ! wget -q -O "$FUNCTIONAL_TESTS" https://raw.githubusercontent.com/minio/mc/master/functional-tests.sh; then
-		echo "failed to download https://raw.githubusercontent.com/minio/mc/master/functional-tests.sh"
-		exit 1
-	fi
 
 	sed -i 's|-sS|-sSg|g' "$FUNCTIONAL_TESTS"
 	chmod a+x "$FUNCTIONAL_TESTS"

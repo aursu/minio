@@ -23,17 +23,7 @@ function start_minio_5drive() {
 	unset MINIO_KMS_AUTO_ENCRYPTION # do not auto-encrypt objects
 	export MINIO_CI_CD=1
 
-	MC_BUILD_DIR="mc-$RANDOM"
-	if ! git clone --quiet https://github.com/minio/mc "$MC_BUILD_DIR"; then
-		echo "failed to download https://github.com/minio/mc"
-		purge "${MC_BUILD_DIR}"
-		exit 1
-	fi
-
-	(cd "${MC_BUILD_DIR}" && go build -o "$WORK_DIR/mc")
-
-	# remove mc source.
-	purge "${MC_BUILD_DIR}"
+	"${BASH_SOURCE[0]%/*}/install-mc.sh" "$WORK_DIR/mc" || exit 1
 
 	"${WORK_DIR}/mc" cp --quiet -r "buildscripts/cicd-corpus/" "${WORK_DIR}/cicd-corpus/"
 

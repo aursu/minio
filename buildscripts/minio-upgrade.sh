@@ -65,7 +65,7 @@ __init__() {
 	export GOPATH=/tmp/gopath
 	export PATH=${PATH}:${GOPATH}/bin
 
-	go install github.com/minio/mc@latest
+	"${BASH_SOURCE[0]%/*}/install-mc.sh" "${GOPATH}/bin/mc" || exit 1
 
 	## this is needed because github actions don't have
 	## docker-compose on all runners
