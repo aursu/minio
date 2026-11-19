@@ -8,3 +8,4 @@ One line per fact file. Update the file, not just this line.
 - [AIStor is off limits](aistor-not-usable.md) — proprietary evaluation licence forbids reverse engineering; no AIStor binary in build/tests/CI; fixes from advisory text only.
 - [Server tests in Docker](server-tests-in-docker.md) — run as non-root and `rm /.dockerenv`, or 7 false failures and a forever hang in `TestCreateServerEndpoints` (2026-11-19).
 - [Original console source](console-source-go-proxy.md) — upstream `console`/`mds` repos are gone (2026-11-19); **original code only**; history in `bexsoft/*` mirrors, proven against proxy zips + upstream `go.sum`; no community forks.
+- [GitHub CLI](gh-cli.md) — `gh` runs in Docker; token in `~/.config/gh` is **dedicated to this project** (aursu/minio, console, mds); `--repo aursu/minio` is mandatory (2026-11-19).
