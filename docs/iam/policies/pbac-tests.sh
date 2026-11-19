@@ -8,7 +8,8 @@ pkill minio
 pkill kes
 rm -rf /tmp/xl
 
-buildscripts/install-mc.sh ./mc || exit 1
+buildscripts/install-mc.sh "$(go env GOPATH)/bin/mc" || exit 1
+cp -a "$(go env GOPATH)/bin/mc" ./mc
 
 if [ ! -f ./kes ]; then
 	wget --quiet -O kes https://github.com/minio/kes/releases/latest/download/kes-linux-amd64 &&
