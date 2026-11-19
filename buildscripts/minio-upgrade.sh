@@ -35,6 +35,26 @@ verify_checksum_after_heal() {
 	fi
 }
 
+# add_alias returns once one node answers; behind nginx the others may still
+# be starting (502, InternalError, "not initialized"), and each such error
+# body carries a new RequestId, so comparing checksums then fails at random.
+# Wait until the anonymous read the check relies on succeeds 8 times in a
+# row - twice round the 4 nodes nginx balances over - for up to 120s.
+wait_for_anonymous_read() {
+	local streak=0
+	for _ in $(seq 1 120); do
+		if curl -sf -o /dev/null "$1"; then
+			streak=$((streak + 1))
+			[ "$streak" -lt 8 ] || return 0
+		else
+			streak=0
+		fi
+		sleep 1
+	done
+	echo "anonymous read of $1 did not succeed 8 times in a row within 120s"
+	exit 1
+}
+
 verify_checksum_mc() {
 	local expected
 	expected=$(mc cat "$1" | sha256sum)
@@ -115,6 +135,7 @@ main() {
 	MINIO_VERSION=dev /tmp/gopath/bin/docker-compose -f "buildscripts/upgrade-tests/compose.yml" up -d --build
 
 	add_alias
+	wait_for_anonymous_read http://127.0.0.1:9000/minio-test/to-read/hosts
 
 	verify_checksum_after_heal minio/minio-test http://127.0.0.1:9000/minio-test/to-read/hosts
 
