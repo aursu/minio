@@ -39,6 +39,22 @@ Date: 2026-11-19. Builds on [01-feasibility](01-feasibility.md).
    SSO login works, the restored admin screens (users, groups, policies,
    buckets, config, IDP, monitoring) load and act, the S3 path is unaffected.
 
+## Phase S — server security patches (own code; added after [03-baseline](03-baseline.md))
+
+Seven advisories against MinIO's own code are open in `minio/minio` and fixed
+only in closed AIStor. Each is fixed here by a patch of our own:
+
+1. Write a regression test that reproduces the exploit — it must fail on the
+   unchanged tree.
+2. Smallest fix that makes it pass; the full unit suite and the integration
+   suites stay green.
+3. Note in `fork/notes/` citing the advisory, what the fix does, and why not
+   the alternative.
+
+Order: CVE-2026-33322 (OIDC — the feature this fork exists for),
+CVE-2026-40344 + CVE-2026-41145 (unauthenticated write), CVE-2026-34204,
+CVE-2026-39414, CVE-2026-33419 (LDAP), CVE-2026-42600 (distributed only).
+
 ## Phase C — original console fixes after v1.7.6
 
 Cherry-picks from `aursu/console` `master`, one per commit:
@@ -87,10 +103,25 @@ follows so its own tests run on the same set.
 13. Multi-stage Dockerfile (UI → Go → minimal runtime); version string marks
     the fork. Image registry and tag naming decided here.
 
+## Testing (every change)
+
+| Level | Suite | When |
+|---|---|---|
+| unit | server `go test ./...`; console `go test ./api/... ./pkg/...` | every commit; compared with the baseline in report 03 |
+| unit, targeted | new regression test per security patch | Phase S |
+| integration | console `integration/` (live server + PostgreSQL) | every server or console change |
+| integration, SSO | console `sso-integration/` (Dex + OpenLDAP) | console, OIDC, dependency changes |
+| integration, IAM | server `make test-iam`, `test-iam-import-with-openid` | IAM/STS/OIDC/LDAP changes |
+| UI end-to-end | console `web-app/tests` (TestCafe/Playwright) | UI bundle rebuilds |
+
+A test that fails on the baseline is recorded there and does not block; a test
+that passed on the baseline and fails after a change blocks that change.
+
 ## Residual risk (accepted unless decided otherwise)
 
-- Server code receives no upstream fixes after 2026-02 (maintenance mode);
-  dependency bumps do not cover flaws in MinIO's own code.
+- Server code receives no upstream fixes after 2026-02 (maintenance mode).
+  Known advisories are covered by Phase S; flaws found later in AIStor will
+  again need our own patches.
 - UI majors stay: React 18, react-router 6, styled-components 5, Redux
   Toolkit 1. Each is a rewrite-sized change, not a bump.
 - `mds` stays at v1.0.4; its later versions grew with the stripped UI.
