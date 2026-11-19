@@ -79,8 +79,13 @@ Date: 2026-11-19. Supersedes [02-plan](02-plan.md); facts from
     `v1.7.6` (`git read-tree`). Verify: `git diff v1.7.6 HEAD` is empty.
     History is kept, so every later original commit stays cherry-pickable.
     Tests: console Go unit tests.
-1.2 **Original Go-side fixes:** `9e0416f` (s3.Delete*), `33a7fbb` (webhook
-    regex). Tests: unit.
+1.2 **Original UI fixes** (corrected 2026-11-19: both are web-app changes,
+    not Go): `9e0416f` (s3.Delete* permissions; also bumps `jspdf` to 3.0 and
+    with it `dompurify` to 3.2), `33a7fbb` (webhook regex). **Done after 1.3**:
+    without a working `mds` the UI cannot be installed, tested or rebuilt, and
+    a fix that is not in the committed bundle never reaches the server.
+    Tests: upstream's UI checks (warnings, prettier, dead code) + `yarn test`;
+    bundle rebuild in the same PR.
 1.3 **UI pipeline.** `mds` dependency URL → `github.com/aursu/mds.git#v1.0.4`
     (same commit `027fb7f9`, lockfile unchanged otherwise). Rebuild the bundle
     with the original toolchain (Node 18, yarn 4.4.0) and compare with the
