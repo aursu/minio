@@ -49,8 +49,8 @@ unset MINIO_KMS_KES_KEY_NAME
 buildscripts/install-mc.sh ./mc || exit 1
 
 if [ ! -f mc.RELEASE.2021-03-12T03-36-59Z ]; then
-	wget -q -O mc.RELEASE.2021-03-12T03-36-59Z https://dl.minio.io/client/mc/release/linux-amd64/archive/mc.RELEASE.2021-03-12T03-36-59Z &&
-		chmod +x mc.RELEASE.2021-03-12T03-36-59Z
+	MC_RELEASE_TAG=RELEASE.2021-03-12T03-36-59Z MC_COMMIT=501b791408baa2a03592fb377916f34e6183e8f0 \
+		buildscripts/install-mc.sh ./mc.RELEASE.2021-03-12T03-36-59Z || exit 1
 fi
 
 minio server --address 127.0.0.1:9001 "http://127.0.0.1:9001/tmp/multisitea/data/disterasure/xl{1...4}" \

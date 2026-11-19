@@ -62,3 +62,19 @@ Both report `RELEASE.2025-08-13T08-35-41Z (commit-id=7394ce0dd2a8…)`.
 - The changed scripts: `bash -n` and `shfmt -s -d` over `buildscripts/` are clean.
 - Integration: the CI jobs that run these scripts (healing, `test-timeout`,
   multipart, root-disable, upgrade) run on this PR.
+
+## Follow-up: an older client on purpose (PR after #11)
+
+`setup_3site_replication.sh` writes objects with `mc RELEASE.2021-03-12T03-36-59Z`
+to test data in the old format. The helper's pin can now be overridden for
+such a test by setting `MC_RELEASE_TAG` and `MC_COMMIT` **together**; setting only
+one is an error, because it would stamp a wrong version.
+
+The helper now sets the five version variables itself rather than running
+`buildscripts/gen-ldflags.go`. The 2021 release's `gen-ldflags.go` ignores its
+argument and stamps the build time. The resulting `-X` flags are the ones the
+2025 generator produces. The 2025 build's `--version` line is unchanged and
+still matches the `ghcr` image.
+
+The 2021 tag (`501b7914`) builds with Go 1.24. A smoke test of `alias set`,
+`mb`, `cp` and `ls` against a server works.
