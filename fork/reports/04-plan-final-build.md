@@ -33,7 +33,33 @@ Date: 2026-11-19. Supersedes [02-plan](02-plan.md); facts from
     integration, SSO integration (Dex + OpenLDAP: `quay.io/minio/dex`,
     `quay.io/minio/openldap` still published, 2025-05-14). One command each,
     exit status = pass/fail. Run on the unchanged tree: must match the
-    baseline.
+    baseline. Used for local pre-checks and for what CI does not cover.
+0.2 **GitHub Actions = the PR gate.** Upstream's workflows already run on
+    `pull_request` into `master`, on GitHub-hosted `ubuntu-latest` runners
+    (free for a public repo):
+
+    | Workflow | Runs |
+    |---|---|
+    | `go-lint.yml` | `make test` (all unit tests), `make test-race` |
+    | `go.yml` | `make verify`, `make test-timeout` |
+    | `iam-integrations.yaml` | `make test-iam` with OpenLDAP, etcd, Dex (OIDC); site replication LDAP/OIDC; IAM import with OpenID |
+    | `replication.yaml`, `go-healing.yml`, `go-resiliency.yml`, `upgrade-ci-cd.yaml`, `root-disable.yml` | replication, ILM, decom, healing, resiliency, upgrade |
+    | `vulncheck.yml` | `govulncheck` (also on push) |
+
+    - Actions must be enabled once in the fork's Actions tab (GitHub disables
+      workflows in forks; no run so far, 2026-11-19).
+    - `mint.yml` needs a self-hosted `mint` runner we do not have: disable it
+      in the Actions UI. `lock.yml`/`issues.yaml` are upstream housekeeping:
+      disable likewise. No file changes.
+    - `vulncheck.yml` installs `govulncheck@latest`, which needs Go ≥ 1.26:
+      it fails until 2.2. Expected; recorded, not fixed separately.
+    - The Go version matrix (`1.24.x`) moves with the toolchain in 2.2.
+    - The first PR (this plan, docs only) gives the CI baseline of the
+      unchanged code; failures there are recorded and do not block.
+
+    The console's own CI (`.github/workflows/jobs.yaml`: Go tests,
+    integration, 8 UI permission suites) comes back with the restore in 1.1;
+    its jobs that build "latest MinIO" are pointed at `aursu/minio` there.
 
 ## Phase 1 — full console (aursu/console)
 
