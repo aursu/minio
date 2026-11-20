@@ -161,7 +161,36 @@ Date: 2026-11-19. Supersedes [02-plan](02-plan.md); facts from
 1.6 **Console Go side.** Go 1.27.4, modules aligned with the server,
     including upstream's `6499469` (jwt) and `28b0801` (Go vulnerabilities).
 
+    **Done 2026-11-21** (aursu/console #23–#28; its `fork/notes/13`–`16`).
+    `govulncheck` reachable findings: **65 → 0**; "Analysis" is green.
+    - #23: toolchain **Go 1.27.4**, golangci-lint v2.15.0 with the v1
+      lint scope kept, CI takes Go from `go.mod`, govulncheck runs with
+      the toolchain's own `go` first on PATH (65 → 13).
+    - #24: `actions/setup-go` v6, so jobs install the `toolchain` line
+      instead of downloading it at run time.
+    - #25: TestCafe `--browser-init-timeout` against the Firefox
+      connection flake.
+    - #26: upstream `6499469` (jwt/v4 4.5.2).
+    - #27: `golang.org/x/net` 0.60.0 and the x/ family; the console's
+      **`go` line is now 1.26.0**. Upstream `28b0801` (x/net 0.38) is
+      superseded: 0.38 is still vulnerable.
+    - #28: prometheus 0.311.3, grpc 1.83.1, compress 1.20.2. prometheus
+      pulls the go-openapi stack (strfmt 0.26.1, validate 0.25.1, …);
+      **swag 0.29.2** was taken so that no `replace` is needed. swag 0.25.4
+      needs one (`go-openapi/testify/v2 => v2.0.2`, as in prometheus's
+      own go.mod), and a `replace` does not reach modules that require the
+      console. 96 deprecated `swag.*` calls moved to `swag/conv`,
+      `netutils`, `cmdutils`.
+
+    CI on #28: 30/30 green; Integration 86, SSO 2, permission suites 83,
+    Subpath 1, playwright 6, React 41.
+
 ## Phase 2 — server (aursu/minio)
+
+**Order changed 2026-11-21: 2.2 comes before or together with 2.1.** The
+console's `go` line is 1.26.0 since aursu/console #27, so a module that
+requires it needs `go >= 1.26`; the server is at `go 1.24.0`. The console's
+CI jobs that embed it raise the line inside the job, which is why they pass.
 
 2.1 Point at the full console: `replace github.com/minio/console =>
     github.com/aursu/console <commit>`. Server code untouched.
@@ -169,7 +198,14 @@ Date: 2026-11-19. Supersedes [02-plan](02-plan.md); facts from
     Already shown to build: since aursu/console #11, the console's
     Integration and SSO jobs build `aursu/minio` master with
     `replace github.com/minio/console => <console tree>`, and both pass.
+    Expect the go-openapi stack to move with it (strfmt 0.26.1,
+    swag 0.29.2); no `replace` beyond the console's own is needed.
 2.2 Toolchain Go 1.24 → 1.27.4. Clears the ~33 standard-library findings.
+    golangci-lint must move with it: the server's v2.11.4 is built with Go
+    1.26 and refuses code that targets Go 1.27; v2.15.0 (Go 1.27.0) is the
+    first that works. In the console that move added staticcheck's ST/QF
+    checks; pinning `checks: [SA*, S1*]` kept the v1 scope (console
+    note 13).
 2.3 Security tier: every module `govulncheck` reports (x/crypto, x/net,
     x/text, amqp091-go, prometheus, grpc, otel/sdk, go-jose, paho, compress),
     grouped by family, one PR per group. Target: 0 reachable.
@@ -209,7 +245,8 @@ AIStor-only advisories keep appearing.
 
 ## Residual risk
 
-- UI majors stay (React 18, react-router 6, styled-components 5, Redux
-  Toolkit 1): each is a rewrite, not a bump.
+- UI majors stay (React 18, styled-components 5, Redux Toolkit 1): each
+  is a rewrite, not a bump. (Corrected 2026-11-21: react-router was moved
+  to 7 in 1.5, aursu/console #21; this line still said 6.)
 - `mds` stays at v1.0.4.
 - Flaws in MinIO's own code found later need our own patches again.
