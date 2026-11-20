@@ -131,6 +131,33 @@ Date: 2026-11-19. Supersedes [02-plan](02-plan.md); facts from
     - `http-proxy-middleware` → 2.0.10 (CVE-2026-55602, dev server only).
     - `testcafe` in `package.json` (3.6.2) aligned with CI's 3.7.7, and the
       CI's unpinned root `yarn add minio` moved to the lockfile.
+
+    **Done 2026-11-20** (aursu/console #13–#22). Production audit
+    (`yarn npm audit --environment production`): **99 → 0**; it was
+    4 critical and 39 high before. "React Code Has No Known Vulnerable Deps"
+    is green.
+    - #13: `react-component-export-image` replaced by `html2canvas`
+      directly (our recommendation, accepted). jsPDF leaves the bundle.
+    - #14: react-router 6.30.6, lodash 4.18.1; form-data and qs refreshed.
+    - #15: our own validation of the post-login `redirect-path`, an open
+      redirect that react-router 6 did not fully guard.
+    - #16: transitive dependencies; tar 7 through node-pre-gyp 2 and
+      node-gyp 11.
+    - #17: react-pdf 9.2.1 (canvas 3, N-API), so Node 18 could be left.
+    - #18: **Node 26.13.1** (active LTS, the owner's choice over 24),
+      **yarn 4.18.1** with its supply-chain defaults kept, corepack pinned
+      in CI.
+    - #19: Playwright 1.65.1 (1.49 hung installing browsers on Node 26).
+    - #20: test tools pinned (minio JS 8.0.7; TestCafe 3.7.7 in CI and
+      `package.json`).
+    - #21: **react-router 7.18.6**, the owner's choice over an audit
+      exception. Four relative navigation targets were made absolute after
+      v7's splat-path change looped the login redirect.
+    - #22: `http-proxy-middleware` 2.0.12, dev server only.
+
+    Not done, for later: recharts 3 and superagent 10. The audit reports
+    both majors as deprecation notices, not advisories. react-router 8
+    needs React 19.
 1.6 **Console Go side.** Go 1.27.4, modules aligned with the server,
     including upstream's `6499469` (jwt) and `28b0801` (Go vulnerabilities).
 
