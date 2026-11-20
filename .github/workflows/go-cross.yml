@@ -16,18 +16,16 @@ permissions:
 
 jobs:
   build:
-    name: Build Tests with Go ${{ matrix.go-version }} on ${{ matrix.os }}
+    name: Build Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go-version: [1.24.x]
         os: [ubuntu-24.04]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: ${{ matrix.go-version }}
-          check-latest: true
+          go-version-file: go.mod
       - name: Build on ${{ matrix.os }}
         if: matrix.os == 'ubuntu-24.04'
         env:

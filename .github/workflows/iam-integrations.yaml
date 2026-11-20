@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   iam-matrix-test:
-    name: "[Go=${{ matrix.go-version }}|ldap=${{ matrix.ldap }}|etcd=${{ matrix.etcd }}|openid=${{ matrix.openid }}]"
+    name: "[ldap=${{ matrix.ldap }}|etcd=${{ matrix.etcd }}|openid=${{ matrix.openid }}]"
     runs-on: ubuntu-24.04
 
     services:
@@ -61,7 +61,6 @@ jobs:
       # are turned off - i.e. if ldap="", then ldap server is not enabled for
       # the tests.
       matrix:
-        go-version: [1.24.x]
         ldap: ["", "localhost:389"]
         etcd: ["", "http://localhost:2379"]
         openid: ["", "http://127.0.0.1:5556/dex"]
@@ -76,10 +75,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: ${{ matrix.go-version }}
-          check-latest: true
+          go-version-file: go.mod
       - name: Test LDAP/OpenID/Etcd combo
         env:
           _MINIO_LDAP_TEST_SERVER: ${{ matrix.ldap }}
@@ -130,10 +128,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: ${{ matrix.go-version }}
-          check-latest: true
+          go-version-file: go.mod
       - name: Checkout minio-iam-testing
         uses: actions/checkout@v4
         with:
@@ -147,10 +144,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: ${{ matrix.go-version }}
-          check-latest: true
+          go-version-file: go.mod
       - name: Checkout minio-iam-testing
         uses: actions/checkout@v4
         with:
