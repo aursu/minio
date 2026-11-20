@@ -70,41 +70,78 @@ Date: 2026-11-19. Supersedes [02-plan](02-plan.md); facts from
       unchanged code; failures there are recorded and do not block.
 
     The console's own CI (`.github/workflows/jobs.yaml`: Go tests,
-    integration, 8 UI permission suites) comes back with the restore in 1.1;
-    its jobs that build "latest MinIO" are pointed at `aursu/minio` there.
+    integration, 8 UI permission suites) came back with the restore in 1.1,
+    but its end-to-end jobs were red. Repaired 2026-11-20 in
+    aursu/console #10 and #11 (its `fork/notes/05-ci-gate-repair.md`):
+    - the test server is `ghcr.io/aursu/minio/minio` pinned by digest, or
+      built from `aursu/minio` with the console under test embedded;
+    - `mc` is copied from the server container;
+    - TestCafe 3.7.7 (3.5.0 hangs on Firefox 160);
+    - Playwright comes from the lockfile.
+
+    Results: 83 permission tests, 86 integration, 2 SSO, 6 playwright, all
+    green. The only reds are the vulnerability checks that 1.5 and 1.6
+    address.
 
 ## Phase 1 — full console (aursu/console)
 
 1.1 **Restore.** One commit on top of `master` whose tree is exactly
     `v1.7.6` (`git read-tree`). Verify: `git diff v1.7.6 HEAD` is empty.
     History is kept, so every later original commit stays cherry-pickable.
-    Tests: console Go unit tests.
+    Tests: console Go unit tests. **Done 2026-11-19** (aursu/console #1).
 1.2 **Original UI fixes** (corrected 2026-11-19: both are web-app changes,
     not Go): `9e0416f` (s3.Delete* permissions; also bumps `jspdf` to 3.0 and
     with it `dompurify` to 3.2), `33a7fbb` (webhook regex). **Done after 1.3**:
     without a working `mds` the UI cannot be installed, tested or rebuilt, and
     a fix that is not in the committed bundle never reaches the server.
     Tests: upstream's UI checks (warnings, prettier, dead code) + `yarn test`;
-    bundle rebuild in the same PR.
+    bundle rebuild in the same PR. **Done 2026-11-19** (aursu/console #5).
 1.3 **UI pipeline.** `mds` dependency URL → `github.com/aursu/mds.git#v1.0.4`
     (same commit `027fb7f9`, lockfile unchanged otherwise). Rebuild the bundle
     with the original toolchain (Node 18, yarn 4.4.0) and compare with the
     committed one — proves the pipeline before anything changes.
-1.4 **Original UI fixes and dependency commits:** `a2dfcce`, `e479c7b`,
-    `40bee68`, `88cd0d4` where they apply; `36d0e78`, `f5ad4de`, `a4281ed`,
-    `ff2b72f`, `6df2db8`, `7e5f4f3` (react-router 6.30.1, `jspdf`/
-    `react-component-export-image` removal, and the rest).
+    **Done 2026-11-19** (aursu/console #4).
+1.4 **Original UI fixes and dependency commits.** Done 2026-11-20
+    (aursu/console #7, #9, #12). Each of the 31 upstream commits after
+    v1.7.6 has a recorded decision in the console's
+    `fork/notes/03-upstream-commits-after-v1.7.6.md`.
+    - Taken: `e479c7b`, `a2dfcce`, `88cd0d4` (#7); the Dependabot bumps
+      `ff2b72f`, `6df2db8` (#9). The formidable bump needed our own Jest
+      setup commit, because upstream had deleted its UI tests.
+    - Not taken: `40bee68`. It fixes the simplified console's sidebar
+      filter, which the full console does not have.
+    - Superseded by 1.5: the dependency snapshots `36d0e78`, `f5ad4de`,
+      `a4281ed`, `7e5f4f3`. Each conflicts in `yarn.lock`.
+    - Moved to 1.6: the Go commits `6499469` (jwt) and `28b0801`.
+
+    **Corrected 2026-11-20:** this step used to list `7e5f4f3` as removing
+    `jspdf`/`react-component-export-image`. It does not; it only bumps
+    dependencies. Upstream removed that package in `63c6d89`, the
+    simplified console, together with the dashboard that uses it.
 1.5 **UI dependencies.** Node → current LTS, yarn → latest 4.x, direct
     dependencies within majors, transitive ones via `resolutions`. Target: no
     high/critical in the shipped closure. Bundle rebuild = its own commit.
-    Tests: unit + UI end-to-end suites.
-1.6 **Console Go side.** Go 1.27.4, modules aligned with the server.
+    Tests: unit + UI end-to-end suites. It also covers:
+    - **`react-component-export-image`**. It ships a prebuilt jsPDF 1.5.3,
+      with 15 advisories, in the bundle. Only its PNG export of dashboard
+      widgets is used, and that path is unreachable for jsPDF's advisories.
+      Replacing it with a maintained library or dropping the button is
+      **our own decision**, since upstream only removed it along with the
+      dashboard.
+    - `http-proxy-middleware` → 2.0.10 (CVE-2026-55602, dev server only).
+    - `testcafe` in `package.json` (3.6.2) aligned with CI's 3.7.7, and the
+      CI's unpinned root `yarn add minio` moved to the lockfile.
+1.6 **Console Go side.** Go 1.27.4, modules aligned with the server,
+    including upstream's `6499469` (jwt) and `28b0801` (Go vulnerabilities).
 
 ## Phase 2 — server (aursu/minio)
 
 2.1 Point at the full console: `replace github.com/minio/console =>
     github.com/aursu/console <commit>`. Server code untouched.
     Tests: unit, console integration, **SSO integration**.
+    Already shown to build: since aursu/console #11, the console's
+    Integration and SSO jobs build `aursu/minio` master with
+    `replace github.com/minio/console => <console tree>`, and both pass.
 2.2 Toolchain Go 1.24 → 1.27.4. Clears the ~33 standard-library findings.
 2.3 Security tier: every module `govulncheck` reports (x/crypto, x/net,
     x/text, amqp091-go, prometheus, grpc, otel/sdk, go-jose, paho, compress),
