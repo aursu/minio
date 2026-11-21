@@ -14,7 +14,7 @@ go mod tidy
 |---|---|---|
 | `google.golang.org/grpc` | 1.72.0 → **1.83.1** | 2 reachable findings, fixed in 1.83.1; the console's version |
 | `go.opentelemetry.io/otel` family | 1.35.0 → **1.45.0** | grpc requires 1.44; otel/sdk has 2 findings fixed in 1.45.0 |
-| `github.com/go-jose/go-jose/v4` | 4.1.0 → **4.1.4** | required by grpc's cascade; closes 1 finding |
+| `github.com/go-jose/go-jose/v4` | 4.1.0 → **4.1.6** | grpc's cascade requires 4.1.4 (closes 1 govulncheck finding); 4.1.6 for three newer GitHub advisories (below) |
 | `google.golang.org/protobuf`, `genproto` (3) | 1.36.6 → 1.36.11, 2025-04 → 2026-05 | required by grpc; the console's versions |
 | `cloud.google.com/go/storage` | 1.52.0 → 1.56.0 | required by grpc's cascade |
 | `google.golang.org/api` | 0.230.0 → 0.264.0 | the same |
@@ -57,6 +57,30 @@ server.
 - Server-side changes (strict path checking, `grpc-timeout`, unary
   semantics) do not apply.
 
+## go-jose: one step past what grpc requires
+
+The first push of this PR took go-jose 4.1.4, the version grpc's cascade
+requires and the one that closes its govulncheck finding. **Dependency
+Review** then failed: it flags every dependency a PR changes when the new
+version has a known GitHub advisory, and 4.1.4 had three, published
+2026-10-27/28:
+
+| Advisory | Severity | Fixed in |
+|---|---|---|
+| GHSA-mgcc-cww5-fp2q, DoS when parsing JWKs with RSA keys | high | 4.1.6 |
+| GHSA-4w3g-jfj2-cw2q, panic in CBC-HMAC processing | moderate | 4.1.5 |
+| GHSA-vvm8-gf78-28g4, panics in JSON parsing | moderate | 4.1.5 |
+
+None of them was in the Go vulnerability database yet, so govulncheck did
+not report them. go-jose reaches the server through `coreos/go-oidc`, which
+parses the identity provider's JWKs, so the high one is on the OIDC path. A
+second commit takes **4.1.6**, the first version with no known GitHub
+advisory (4.1.9 is the latest); only go-jose moves.
+
+Lesson: govulncheck and Dependency Review read different databases. A
+version that is clean for govulncheck can still carry a newer GitHub
+advisory, so check both before choosing a version.
+
 ## Untested here: GCS tiering
 
 As with the HTTP/2 change (note 06), ILM tiering to GCS is not covered by any
@@ -77,3 +101,8 @@ Go 1.27.4, `golang:1.27.4`, on the build host:
 The first check-gen run reported clean while git could not run in the
 container ("dubious ownership"), so it compared nothing. It was rerun with
 `safe.directory` and a real baseline commit.
+
+With go-jose 4.1.6, all checks were run again: build and vet ok, lint 0
+issues, check-gen clean (git working), govulncheck 15, unit **46/46 ok**.
+The first CI run (go-jose 4.1.4) was green except Analysis (15 findings, as
+expected) and Dependency Review (the go-jose advisories above).
