@@ -1,4 +1,4 @@
-# 08 — grpc v1.83.1, otel v1.45.0 and what grpc requires (plan 04, before step 2.1)
+# 08 — grpc v1.83.2, otel v1.47.0 and what grpc requires (plan 04, before step 2.1)
 
 Date: 2026-11-21. Second of the PRs that raise the server to the console's
 versions before step 2.1 (note 07 explains the order).
@@ -8,12 +8,16 @@ versions before step 2.1 (note 07 explains the order).
 ```
 go get google.golang.org/grpc@v1.83.1 go.opentelemetry.io/otel/sdk@v1.45.0
 go mod tidy
+# after the first two CI runs (GitHub advisories, below):
+go get github.com/go-jose/go-jose/v4@v4.1.6
+go get google.golang.org/grpc@v1.83.2 go.opentelemetry.io/otel/sdk@v1.47.0
+go mod tidy
 ```
 
 | Module | Before → after | Why it moves |
 |---|---|---|
-| `google.golang.org/grpc` | 1.72.0 → **1.83.1** | 2 reachable findings, fixed in 1.83.1; the console's version |
-| `go.opentelemetry.io/otel` family | 1.35.0 → **1.45.0** | grpc requires 1.44; otel/sdk has 2 findings fixed in 1.45.0 |
+| `google.golang.org/grpc` | 1.72.0 → **1.83.2** | 2 reachable findings, fixed in 1.83.1 (the console's version); 1.83.2 for a GitHub advisory (below) |
+| `go.opentelemetry.io/otel` family | 1.35.0 → **1.47.0** | grpc requires 1.44; otel/sdk has 2 findings fixed in 1.45.0; 1.47.0 for a GitHub advisory (below); `otel/log` joins as indirect |
 | `github.com/go-jose/go-jose/v4` | 4.1.0 → **4.1.6** | grpc's cascade requires 4.1.4 (closes 1 govulncheck finding); 4.1.6 for three newer GitHub advisories (below) |
 | `google.golang.org/protobuf`, `genproto` (3) | 1.36.6 → 1.36.11, 2025-04 → 2026-05 | required by grpc; the console's versions |
 | `cloud.google.com/go/storage` | 1.52.0 → 1.56.0 | required by grpc's cascade |
@@ -21,7 +25,7 @@ go mod tidy
 | `golang.org/x/oauth2`, `x/time` | 0.29 → 0.36, 0.11 → 0.14 | the same |
 | envoy, xds, cel, spiffe, gax-go, GCP otel exporters | minor | indirect, the same |
 
-go.mod: 71 lines; go.sum: 178 lines.
+36 modules change in go.mod.
 
 **The Google Cloud stack comes with grpc, not with prometheus** as first
 assumed. grpc 1.83.1's go.mod requires it. 1.83.1 is the first fixed grpc
@@ -57,7 +61,7 @@ server.
 - Server-side changes (strict path checking, `grpc-timeout`, unary
   semantics) do not apply.
 
-## go-jose: one step past what grpc requires
+## GitHub advisories: three steps past the govulncheck fixes
 
 The first push of this PR took go-jose 4.1.4, the version grpc's cascade
 requires and the one that closes its govulncheck finding. **Dependency
@@ -77,9 +81,30 @@ parses the identity provider's JWKs, so the high one is on the OIDC path. A
 second commit takes **4.1.6**, the first version with no known GitHub
 advisory (4.1.9 is the latest); only go-jose moves.
 
+The second CI run's Dependency Review then flagged grpc 1.83.1, and GitHub's
+dependency compare for the PR (`GET
+/repos/aursu/minio/dependency-graph/compare/<base>...<head>`, the data the
+action uses) also listed otel 1.45.0:
+
+| Advisory | Severity | Affects MinIO? | Fixed in |
+|---|---|---|---|
+| GHSA-2v4p-qf9q-27wj, xDS servers panic on a request without `:authority` and `Host` | high | no: MinIO runs no gRPC server | grpc 1.83.2 |
+| GHSA-q7gw-24fr-5p69, `AttributeValueLengthLimit` bypassed by U+FFFD runes | moderate | otel through the GCS SDK | otel sdk/trace 1.47.0 |
+
+The grpc advisory was published on 2026-09-08, before the first CI run, but
+that run's Dependency Review did not report it; why is unknown. Both were
+taken anyway: a patch release each, and a clean version.
+
+After that, **every module version this PR changes (36) was checked**
+against the GitHub advisory database with `gh api
+"/advisories?ecosystem=go&affects=<module>@<version>"`. None has a known
+advisory. The query was first validated on the known-bad versions (grpc
+1.83.1, otel/sdk 1.45.0, go-jose 4.1.4), which it reports.
+
 Lesson: govulncheck and Dependency Review read different databases. A
-version that is clean for govulncheck can still carry a newer GitHub
-advisory, so check both before choosing a version.
+version that is clean for govulncheck can still carry a GitHub advisory,
+and Dependency Review's own report may be incomplete. Check every changed
+module against the GitHub database before pushing.
 
 ## Untested here: GCS tiering
 
@@ -102,7 +127,8 @@ The first check-gen run reported clean while git could not run in the
 container ("dubious ownership"), so it compared nothing. It was rerun with
 `safe.directory` and a real baseline commit.
 
-With go-jose 4.1.6, all checks were run again: build and vet ok, lint 0
-issues, check-gen clean (git working), govulncheck 15, unit **46/46 ok**.
-The first CI run (go-jose 4.1.4) was green except Analysis (15 findings, as
-expected) and Dependency Review (the go-jose advisories above).
+All checks were run again after each step (go-jose 4.1.6; grpc 1.83.2 and
+otel 1.47.0): build and vet ok, lint 0 issues, check-gen clean (git
+working), govulncheck 15, unit **46/46 ok**. Both earlier CI runs were green
+except Analysis (15 findings, as expected) and Dependency Review (the
+advisories above).
