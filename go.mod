@@ -2,13 +2,10 @@ module github.com/minio/minio
 
 go 1.24.0
 
-toolchain go1.24.8
+toolchain go1.27.4
 
 // Install tools using 'go install tool'.
-tool (
-	github.com/tinylib/msgp
-	golang.org/x/tools/cmd/stringer
-)
+tool github.com/tinylib/msgp
 
 require (
 	aead.dev/mtls v0.2.1

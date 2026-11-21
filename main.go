@@ -18,6 +18,12 @@
 package main // import "github.com/minio/minio"
 
 //go:generate go install tool
+// stringer is installed outside go.mod's tool block: as a tool its
+// golang.org/x/tools would join this module's dependency graph and pull
+// x/net, x/crypto and the rest of the x/ family the server links. Older
+// x/tools cannot load newer standard libraries (v0.44 and earlier fail on
+// Go 1.27), so the generator's version must be free to move on its own.
+//go:generate go install golang.org/x/tools/cmd/stringer@v0.53.0
 
 import (
 	"os"

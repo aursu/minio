@@ -9,9 +9,12 @@ VERSION ?= $(shell git describe --tags)
 REPO ?= quay.io/minio
 TAG ?= $(REPO)/minio:$(VERSION)
 
-# Pinned: install.sh from v2.12.0 on fails its checksum step (the release
-# checksums list an .sbom.json next to the tarball and both lines match).
-GOLANGCI_VERSION ?= v2.11.4
+# Pinned. golangci-lint refuses code that targets a Go newer than the Go it
+# was built with: v2.11.4 (Go 1.26) cannot lint the go1.27.4 toolchain;
+# v2.15.0 is built with Go 1.27. Its install.sh matches the tarball's
+# checksum line exactly, so the .sbom.json line that broke v2.12.0 no longer
+# matches too.
+GOLANGCI_VERSION ?= v2.15.0
 GOLANGCI_DIR = .bin/golangci/$(GOLANGCI_VERSION)
 GOLANGCI = $(GOLANGCI_DIR)/golangci-lint
 

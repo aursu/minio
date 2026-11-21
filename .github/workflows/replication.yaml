@@ -16,19 +16,14 @@ permissions:
 
 jobs:
   replication-test:
-    name: Advanced Tests with Go ${{ matrix.go-version }}
+    name: Advanced Tests
     runs-on: ubuntu-24.04
-
-    strategy:
-      matrix:
-        go-version: [1.24.x]
 
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: ${{ matrix.go-version }}
-          check-latest: true
+          go-version-file: go.mod
       - name: Test Decom
         run: |
           sudo sysctl net.ipv6.conf.all.disable_ipv6=0
