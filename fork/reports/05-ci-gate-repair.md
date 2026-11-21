@@ -42,12 +42,27 @@ starting the old server.
 - **Decom (`test-decom`), `bucket2` listing mismatch.** It failed on #10 and
   passed on #11 with the same server code. The bucket has an ILM transition with
   `transition-days 0`, so the listing changes asynchronously.
-- **Resiliency, `test_resiliency_healing_missing_xl_metas`.** It failed on #11
-  in CI: the "before healing" counts were off, while "after healing" was always
-  green. Locally, inside Docker-in-Docker, it ran **4 of 4 fully green**, 9/9
+- **Resiliency, the healing tests** (`test_resiliency_healing_missing_xl_metas`,
+  `_truncated_parts`, `_induced_bitrot`). Only the "before healing" result is
+  ever off, while "after healing" is always green. It is off in one of two ways:
+  - the count is higher than the test induced (5 or 4 missing `xl.meta` where
+    the test removed 1);
+  - the count is right, but the color is one step milder than the test
+    expects (green instead of yellow, yellow instead of red).
+
+  Seen on:
+  - #11;
+  - two PRs on 2026-11-19, one changing only documentation and one only CI
+    (Go 1.24.13, `missing_xl_metas`, all four iterations);
+  - #25 on 2026-11-21: `missing_xl_metas` on the first attempt;
+    `truncated_parts` and `induced_bitrot`, iterations 2–4, on the rerun of
+    the same commit, which had passed them on the first attempt.
+
+  Locally, inside Docker-in-Docker, the tests ran **4 of 4 fully green**, 9/9
   tests each, on both this tree and `RELEASE.2025-04-22T22-12-26Z`, with
   identical test scripts. The likely cause is background healing racing the
-  test's steps on a loaded runner.
+  test's steps on a loaded runner. A red "after healing", or a "before healing"
+  count lower than induced, is not this flake.
 - **Upgrade, `test-upgrade`.** The upgrade itself works. In a local
   reproduction (repo `compose.yml`, 4 nodes + nginx), switching from 2019 to
   this tree: about 13 s of 502/InternalError, then the correct content for 2
