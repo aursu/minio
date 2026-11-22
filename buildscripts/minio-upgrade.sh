@@ -40,19 +40,53 @@ verify_checksum_after_heal() {
 # body carries a new RequestId, so comparing checksums then fails at random.
 # Wait until the anonymous read the check relies on succeeds 8 times in a
 # row - twice round the 4 nodes nginx balances over - for up to 120s.
+# Each change of the HTTP status is printed with its second, so a passing
+# run shows how long the cluster took. On failure the last answer and the
+# cluster's state are printed: without them a timeout explains nothing.
 wait_for_anonymous_read() {
-	local streak=0
-	for _ in $(seq 1 120); do
-		if curl -sf -o /dev/null "$1"; then
+	local streak=0 status="" last_status="" body
+	body="$(mktemp)"
+	for second in $(seq 1 120); do
+		status=$(curl -s -o "${body}" -w '%{http_code}' "$1" || true)
+		if [ "${status}" != "${last_status}" ]; then
+			echo "anonymous read: HTTP ${status} at ${second}s"
+			last_status="${status}"
+		fi
+		if [ "${status}" = 200 ]; then
 			streak=$((streak + 1))
-			[ "$streak" -lt 8 ] || return 0
+			if [ "$streak" -ge 8 ]; then
+				echo "anonymous read ready after ${second}s"
+				rm -f "${body}"
+				return 0
+			fi
 		else
 			streak=0
 		fi
 		sleep 1
 	done
 	echo "anonymous read of $1 did not succeed 8 times in a row within 120s"
+	echo "last answer, HTTP ${status}:"
+	head -c 2048 "${body}"
+	echo
+	rm -f "${body}"
+	print_cluster_state
 	exit 1
+}
+
+# What the nodes and nginx were doing when a check failed.
+print_cluster_state() {
+	local service
+	echo "=== docker-compose ps"
+	MINIO_VERSION=dev /tmp/gopath/bin/docker-compose \
+		-f "buildscripts/upgrade-tests/compose.yml" ps -a || true
+	echo "=== mc admin info minio"
+	timeout 30 mc admin info minio || true
+	for service in minio1 minio2 minio3 minio4 nginx; do
+		echo "=== logs of ${service}, last 200 lines"
+		MINIO_VERSION=dev /tmp/gopath/bin/docker-compose \
+			-f "buildscripts/upgrade-tests/compose.yml" \
+			logs --no-color --tail 200 "${service}" || true
+	done
 }
 
 verify_checksum_mc() {
