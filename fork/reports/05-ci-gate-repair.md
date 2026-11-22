@@ -43,12 +43,22 @@ starting the old server.
   passed on #11 with the same server code. The bucket has an ILM transition with
   `transition-days 0`, so the listing changes asynchronously.
 - **Resiliency, the healing tests** (`test_resiliency_healing_missing_xl_metas`,
-  `_truncated_parts`, `_induced_bitrot`). Only the "before healing" result is
-  ever off, while "after healing" is always green. It is off in one of two ways:
+  `_truncated_parts`, `_induced_bitrot`). Usually only the "before healing"
+  result is off, while "after healing" is green. It is off in one of two ways:
   - the count is higher than the test induced (5 or 4 missing `xl.meta` where
-    the test removed 1);
+    the test removed 1; 6 for 2; 3 corrupted parts for 2);
   - the count is right, but the color is one step milder than the test
     expects (green instead of yellow, yellow instead of red).
+
+  #29 on 2026-11-22 (a change to `minio-upgrade.sh` and docs only, nothing
+  the resiliency job runs) showed both, and two shapes not seen before, each
+  in iteration 1 of its test:
+  - `missing_xl_metas`: before yellow for 1 missing (want green), and
+    **after yellow with 0 missing** (want green);
+  - `truncated_parts`: **grey, 0 missing and 0 corrupted, before and
+    after** (want 1 corrupted before). The test saw no object state at all.
+
+  The rerun of the same commit passed every test, 4 iterations each.
 
   Seen on:
   - #11;
@@ -61,8 +71,26 @@ starting the old server.
   Locally, inside Docker-in-Docker, the tests ran **4 of 4 fully green**, 9/9
   tests each, on both this tree and `RELEASE.2025-04-22T22-12-26Z`, with
   identical test scripts. The likely cause is background healing racing the
-  test's steps on a loaded runner. A red "after healing", or a "before healing"
-  count lower than induced, is not this flake.
+  test's steps on a loaded runner.
+
+  **Rule:** a "before healing" count lower than induced, or an "after
+  healing" that is not green, is not this flake by default. Look at it on
+  its own: does the same shape come back on a rerun or on another PR? The
+  yellow "after" and the grey result of #29 did not come back; they are
+  recorded here so that a second occurrence is recognised as a pattern.
+- **Replication (`test-replication`, in "MinIO advanced tests"), a server
+  that never starts.** #29 on 2026-11-22: in
+  `docs/bucket/replication/setup_2site_existing_replication.sh` all four
+  `minio server` processes were started; `./mc ready sitea` then got
+  `connection refused` on 127.0.0.1:9001 for 46 minutes, until the run was
+  cancelled. Only two `minio` processes were left at that point, so at least
+  the 9001 server died on start. Why is unknown: the script sends each
+  server's output to `/tmp/sitea_1.log` etc., which CI never prints, and `mc
+  ready` has no timeout, so a dead server turns into a hang instead of a
+  failure. The step normally takes 9 minutes; the rerun of the same commit
+  took 9 and passed. Making the script print those logs and bound the wait
+  would turn the next occurrence into an explained failure, as note 09 did
+  for the upgrade test.
 - **Upgrade, `test-upgrade`.** The upgrade itself works. In a local
   reproduction (repo `compose.yml`, 4 nodes + nginx), switching from 2019 to
   this tree: about 13 s of 502/InternalError, then the correct content for 2
@@ -76,7 +104,9 @@ starting the old server.
   (5 passed). The only difference was grpc 1.83.2 and otel 1.47, and
   nothing on the anonymous S3 read path uses them. No failure kept the
   HTTP answer or the node logs; since note 09 the test prints both, so
-  the next failure can be read instead of guessed at.
+  the next failure can be read instead of guessed at. On #29, the first CI
+  run with it, the cluster answered 200 from the first second and was
+  ready after 8 s.
 
 None of these is fixed by retrying in CI. They are documented here, so a red run
 of these jobs is read against this list before anyone suspects the change under
