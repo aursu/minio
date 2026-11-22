@@ -282,3 +282,5 @@ require (
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/minio/console => github.com/aursu/console v1.7.7-0.20261120232317-7832665c91d3
