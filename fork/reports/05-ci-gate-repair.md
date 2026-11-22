@@ -68,6 +68,16 @@ starting the old server.
   this tree: about 13 s of 502/InternalError, then the correct content for 2
   minutes. The check simply ran too early; fixed in #16.
 
+  **Observed since, not explained:** the wait added in #16 itself timed out
+  ("anonymous read … did not succeed 8 times in a row within 120s") on
+  "Upgrade from RELEASE.2019-12-19", #28 head `b7f363831`: CI attempts 1
+  and 2, then passed on attempt 3. A local reproduction ran that head 8
+  times (7 passed) and the previous head (grpc 1.83.1, otel 1.45) 5 times
+  (5 passed). The only difference was grpc 1.83.2 and otel 1.47, and
+  nothing on the anonymous S3 read path uses them. No failure kept the
+  HTTP answer or the node logs; since note 09 the test prints both, so
+  the next failure can be read instead of guessed at.
+
 None of these is fixed by retrying in CI. They are documented here, so a red run
 of these jobs is read against this list before anyone suspects the change under
 review.
