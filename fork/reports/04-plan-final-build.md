@@ -200,15 +200,27 @@ CI jobs that embed it raise the line inside the job, which is why they pass.
     `replace github.com/minio/console => <console tree>`, and both pass.
     Expect the go-openapi stack to move with it (strfmt 0.26.1,
     swag 0.29.2); no `replace` beyond the console's own is needed.
+    **Done 2026-11-22** (#33, note 12): `replace … => github.com/aursu/console
+    v1.7.7-0.20261120232317-7832665c91d3`. The go-openapi stack had already
+    moved with prometheus (#31), so no other module moved. The embedded
+    console's admin API (`users`, `groups`, `policies`, `configs`,
+    `admin/info`) answers 200 where the simplified one gave 404/501.
+    aursu/console #29 went first: its Integration and SSO jobs now
+    overwrite this replace with `go mod edit` instead of appending a
+    conflicting second one.
 2.2 Toolchain Go 1.24 → 1.27.4. Clears the ~33 standard-library findings.
     golangci-lint must move with it: the server's v2.11.4 is built with Go
     1.26 and refuses code that targets Go 1.27; v2.15.0 (Go 1.27.0) is the
     first that works. In the console that move added staticcheck's ST/QF
     checks; pinning `checks: [SA*, S1*]` kept the v1 scope (console
     note 13).
+    **Done 2026-11-21** (#24, note 05).
 2.3 Security tier: every module `govulncheck` reports (x/crypto, x/net,
     x/text, amqp091-go, prometheus, grpc, otel/sdk, go-jose, paho, compress),
     grouped by family, one PR per group. Target: 0 reachable.
+    **Done so far:** x/ family (#25, note 06), compress (#27, note 07),
+    grpc and otel (#28, note 08), prometheus (#31, note 10). As of
+    2026-11-22, 11 reachable left: amqp091-go (10) and paho (1).
 2.4 Remaining modules within majors, in groups.
 
 Gate for every PR: unit suite as in the baseline; integration suites for

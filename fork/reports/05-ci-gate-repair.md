@@ -75,9 +75,22 @@ starting the old server.
 
   **Rule:** a "before healing" count lower than induced, or an "after
   healing" that is not green, is not this flake by default. Look at it on
-  its own: does the same shape come back on a rerun or on another PR? The
-  yellow "after" and the grey result of #29 did not come back; they are
-  recorded here so that a second occurrence is recognised as a pattern.
+  its own: does the same shape come back on a rerun or on another PR?
+
+  **Both #29 shapes came back** on #32 (2026-11-22), a change to the
+  resiliency setup's wait only, whose setup needed 2 attempts, so nothing
+  after it ran differently. Iteration 4 of each test:
+  - `missing_xl_metas`: before red 3 missing (want red **4**), after
+    **yellow with 0 missing**;
+  - `truncated_parts`: **0 missing and 0 corrupted before and after**,
+    red this time instead of grey (want 4 corrupted before).
+
+  Iterations 1–3 of `missing_xl_metas` had the usual shapes (5 missing for
+  1; green for yellow; yellow for red); the other seven tests passed. So
+  these two shapes are part of this flake: both were seen on PRs that
+  change no server code. The rule stands for every other shape, and for
+  these two on a PR that does change the server: rerun, and suspect the
+  change only if the shape survives the rerun.
 - **Resiliency, the initial setup: `retry: timeout while running: mc alias
   set`** after ten `502 Bad Gateway`. Explained and fixed, note 11. nginx
   in front of the cluster keeps `max_fails=1`, `fail_timeout=10s`; when its
