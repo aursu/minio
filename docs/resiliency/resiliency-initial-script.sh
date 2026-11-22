@@ -14,7 +14,11 @@ SRC_DIR="/tmp/data"
 INLINED_DIR="/tmp/inlined"
 DEST_DIR="/tmp/dest"
 
-TIMEOUT=10
+# nginx in front of the cluster keeps its default max_fails=1 and
+# fail_timeout=10s. If its first request arrives before the nodes listen, it
+# marks all four upstreams down and answers 502 for 10 seconds, which used to
+# be this whole window. 60 attempts outlast that with margin.
+TIMEOUT=60
 while true; do
 	if [[ ${TIMEOUT} -le 0 ]]; then
 		echo retry: timeout while running: mc alias set
