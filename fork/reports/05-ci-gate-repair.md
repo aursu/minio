@@ -78,6 +78,13 @@ starting the old server.
   its own: does the same shape come back on a rerun or on another PR? The
   yellow "after" and the grey result of #29 did not come back; they are
   recorded here so that a second occurrence is recognised as a pattern.
+- **Resiliency, the initial setup: `retry: timeout while running: mc alias
+  set`** after ten `502 Bad Gateway`. Explained and fixed, note 11. nginx
+  in front of the cluster keeps `max_fails=1`, `fail_timeout=10s`; when its
+  first request comes before the nodes listen, it locks all four upstreams
+  out for 10 s, and the setup gave `mc alias set` exactly 10 s. On the
+  build host 2 of 5 starts hit the lockout on master and on #31 alike. Seen
+  on #31 on 2026-11-22.
 - **Replication (`test-replication`, in "MinIO advanced tests"), a server
   that never starts.** #29 on 2026-11-22: in
   `docs/bucket/replication/setup_2site_existing_replication.sh` all four
