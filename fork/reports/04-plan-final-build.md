@@ -218,10 +218,16 @@ CI jobs that embed it raise the line inside the job, which is why they pass.
 2.3 Security tier: every module `govulncheck` reports (x/crypto, x/net,
     x/text, amqp091-go, prometheus, grpc, otel/sdk, go-jose, paho, compress),
     grouped by family, one PR per group. Target: 0 reachable.
-    **Done so far:** x/ family (#25, note 06), compress (#27, note 07),
-    grpc and otel (#28, note 08), prometheus (#31, note 10). As of
-    2026-11-22, 11 reachable left: amqp091-go (10) and paho (1).
-2.4 Remaining modules within majors, in groups.
+    **Done 2026-11-23**: x/ family (#25, note 06), compress (#27, note
+    07), grpc and otel (#28, note 08), prometheus (#31, note 10),
+    amqp091-go 1.14.0 (#35, note 13), paho 1.5.1 (#36, note 14).
+    `govulncheck` reachable findings: **0**; "VulnCheck" on master went green
+    on `722f1fc2f` (#36's merge), the first time in this fork.
+    Left, imported or required but not called: go-ntlmssp (fixed in
+    0.1.1), jsonparser (1.1.2), edwards25519 (1.1.1), etcd `client/pkg/v3`
+    (3.5.33). They go into 2.4.
+2.4 Remaining modules within majors, in groups. First the four modules
+    `govulncheck` still lists as not called (end of 2.3).
 
 Gate for every PR: unit suite as in the baseline; integration suites for
 anything touching IAM, STS, OIDC, LDAP, console, HTTP or dependencies.
