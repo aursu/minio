@@ -306,7 +306,7 @@ Item 1 goes before the first release (decided 2026-11-23); 2–6 after it.
 
 | Order | CVE | Area |
 |---|---|---|
-| 1 | CVE-2026-33322 | OIDC JWT algorithm confusion (the SSO path) |
+| 1 | CVE-2026-33322 | OIDC JWT algorithm confusion (the SSO path) — cherry-pick of relvo-labs/granary `f54f82e1bf69`, note 19 |
 | 2 | CVE-2026-40344, CVE-2026-41145 | unsigned-trailer uploads written without signature |
 | 3 | CVE-2026-34204 | SSE metadata injection via replication headers |
 | 4 | CVE-2026-39414 | S3 Select CSV unbounded line → OOM |

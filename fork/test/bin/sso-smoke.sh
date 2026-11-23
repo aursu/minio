@@ -11,9 +11,13 @@
 #   policy=consoleAdmin  admin/info, users, groups, policies -> 200
 #   policy=readonly      the same calls                       -> 403
 # The second is the control: the rights come from the IdP's claim.
+# Then STS AssumeRoleWithWebIdentity (CVE-2026-33322, note 19):
+#   an id_token issued by Keycloak            -> credentials (control)
+#   an HS256 token signed with the client
+#   secret, kid=client ID, policy=consoleAdmin -> refused
 #
 # Usage: sso-smoke.sh <image>        e.g. local/minio:test
-# Exit status: 0 when both logins behave as above.
+# Exit status: 0 when all of the above hold.
 # Runs where `docker` points (DOCKER_CONTEXT=media-gw for the home server);
 # containers and network are named sso-smoke-* and removed at exit.
 set -euo pipefail
@@ -72,7 +76,7 @@ configure_realm() {
 	local client_uuid
 	client_uuid="$(kcadm create clients -r "$REALM" -i -s clientId="$CLIENT_ID" -s enabled=true \
 		-s publicClient=false -s secret="$CLIENT_SECRET" -s standardFlowEnabled=true \
-		-s directAccessGrantsEnabled=false -s 'redirectUris=["http://minio:9001/oauth_callback"]')"
+		-s directAccessGrantsEnabled=true -s 'redirectUris=["http://minio:9001/oauth_callback"]')"
 	# The profile fields are set so that Keycloak asks for nothing at login.
 	kcadm create users -r "$REALM" -s username="$SSO_USER" -s enabled=true -s emailVerified=true \
 		-s email="$SSO_USER@example.test" -s firstName=Sso -s lastName=User >/dev/null
@@ -150,6 +154,46 @@ done
 CLIENT
 }
 
+# STS with a Keycloak id_token (must give credentials) and with a token
+# forged with the client secret (must be refused).
+check_sts_forgery() {
+	log_info "STS AssumeRoleWithWebIdentity: Keycloak id_token accepted, forged HS256 token refused"
+	docker run --rm -i --network "$NETWORK" \
+		-e SSO_USER="$SSO_USER" -e SSO_PASSWORD="$SSO_PASSWORD" \
+		-e CLIENT_ID="$CLIENT_ID" -e CLIENT_SECRET="$CLIENT_SECRET" -e REALM="$REALM" \
+		--entrypoint bash "$GO_IMAGE" -s <<'CLIENT'
+set -euo pipefail
+cd /tmp
+b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+assume_role() {
+	curl -sS -o sts.out -w '%{http_code}' http://minio:9000/ \
+		--data-urlencode Action=AssumeRoleWithWebIdentity --data-urlencode Version=2011-06-15 \
+		--data-urlencode DurationSeconds=900 --data-urlencode "WebIdentityToken=$1"
+}
+id_token="$(curl -fsS "http://keycloak:8080/realms/$REALM/protocol/openid-connect/token" \
+	--data-urlencode grant_type=password --data-urlencode scope=openid \
+	--data-urlencode "client_id=$CLIENT_ID" --data-urlencode "client_secret=$CLIENT_SECRET" \
+	--data-urlencode "username=$SSO_USER" --data-urlencode "password=$SSO_PASSWORD" |
+	grep -o '"id_token":"[^"]*"' | sed 's/^"id_token":"//; s/"$//')"
+[[ -n $id_token ]] || { echo "no id_token from keycloak"; exit 1; }
+status="$(assume_role "$id_token")"
+echo "keycloak id_token: HTTP $status"
+[[ $status == 200 ]] && grep -q '<AccessKeyId>' sts.out || { cat sts.out; echo "STS refused a valid id_token"; exit 1; }
+
+now="$(date +%s)"
+header="$(printf '{"alg":"HS256","typ":"JWT","kid":"%s"}' "$CLIENT_ID" | b64url)"
+payload="$(printf '{"sub":"forged-admin","aud":"%s","azp":"%s","iss":"http://keycloak:8080/realms/%s","iat":%s,"exp":%s,"policy":"consoleAdmin"}' \
+	"$CLIENT_ID" "$CLIENT_ID" "$REALM" "$now" "$((now + 3600))" | b64url)"
+signature="$(printf '%s.%s' "$header" "$payload" | openssl dgst -sha256 -hmac "$CLIENT_SECRET" -binary | b64url)"
+status="$(assume_role "$header.$payload.$signature")"
+echo "forged HS256 token: HTTP $status $(grep -o '<Code>[^<]*</Code>' sts.out || true)"
+if grep -q '<AccessKeyId>' sts.out; then
+	echo "forged token was exchanged for credentials (CVE-2026-33322)"
+	exit 1
+fi
+CLIENT
+}
+
 # Logs in and checks that every admin API answered the expected status.
 check_login() {
 	local policy="$1" expected="$2"
@@ -192,6 +236,7 @@ main() {
 	check_login consoleAdmin 200
 	switch_policy "$client_uuid" "$mapper_id" readonly
 	check_login readonly 403
+	check_sts_forgery
 	log_info "PASS"
 }
 
