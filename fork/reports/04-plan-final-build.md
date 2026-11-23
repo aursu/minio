@@ -35,9 +35,18 @@ Date: 2026-11-19. Supersedes [02-plan](02-plan.md); facts from
   micro image has a CA bundle; it is copied from the build stage, as
   upstream does. Rocky 9, not 10: el10 needs an x86-64-v3 CPU.
 - **Registry:** `ghcr.io/aursu/minio`.
-- **Version string:** `RELEASE.<UTC time>-aursu.N`, e.g.
-  `RELEASE.2026-11-24T00-00-00Z-aursu.1`. 3.1 checks that `mc admin
-  info` and the server's own version parsing accept the suffix.
+- **Version string:** `RELEASE.<UTC time>.aursu.N`, e.g.
+  `RELEASE.2026-11-24T00-00-00Z.aursu.1`: upstream's hotfix form,
+  stamped by `buildscripts/gen-ldflags.go` with `MINIO_RELEASE=RELEASE`
+  and `MINIO_HOTFIX=aursu.N`, no code change. The suffix goes into
+  `cmd.ReleaseTag` only (`minio --version`, the banner, User-Agents);
+  `cmd.Version` stays the bare RFC3339 time, because it is written into
+  every `xl.meta` as `WrittenByVersion` and decides `IsSourceBuild()`.
+  `mc admin info` shows `cmd.Version`, so the time only.
+  - The first draft had `-aursu.N`. Rejected on 2026-11-23 after the
+    3.1 check: `releaseTagToReleaseTime` splits on `.` and fails on
+    `…Z-aursu` ("extra text"), and gen-ldflags always joins the hotfix
+    suffix with `.`; keeping the dash would need our own code in both.
 - **Image build:** a workflow of our own in `aursu/minio`, not upstream's
   release pipeline.
 - **IdP for the SSO check:** Keycloak.
@@ -266,8 +275,8 @@ anything touching IAM, STS, OIDC, LDAP, console, HTTP or dependencies.
     `buildscripts/gen-ldflags.go`, runtime base Rocky `9-ubi-micro` by
     digest, non-root user, `mc` from `aursu/mc`. Smoke test of the built
     image: starts as non-root, `mc ready`, an object written and read
-    back, `mc admin info` shows the version, console login through
-    Keycloak.
+    back, `mc admin info` shows the release time and `minio --version`
+    the full tag, console login through Keycloak.
 3.2 Release: tag in `aursu/minio`, image published to `ghcr.io/aursu/minio`
     by our own workflow, release report with the `govulncheck`, UI audit
     and OSV state. The first release waits for phase 4 item 1.
