@@ -1,50 +1,88 @@
-FROM golang:1.24-alpine AS build
+# Release image of the fork (ghcr.io/aursu/minio), linux/amd64.
+#
+# The runtime layout, user, environment, entrypoint and volume are those of
+# the last community image, minio/minio:RELEASE.2025-03-12T18-04-18Z (fork
+# copy ghcr.io/aursu/minio/minio); only the binaries are built here, from
+# source: dl.min.io, which upstream's version of this file downloaded
+# from, answers 410.
+#
+#   docker build -f Dockerfile.release \
+#     --build-arg RELEASE=RELEASE.2026-11-24T00-00-00Z.aursu.1 -t <tag> .
+#
+# Without RELEASE the binary is a development build (DEVELOPMENT.<commit
+# time>). buildscripts/gen-ldflags.go reads the commit from .git, so this
+# file has its own Dockerfile.release.dockerignore that keeps .git.
 
-ARG TARGETARCH
-ARG RELEASE
+FROM quay.io/rockylinux/rockylinux:9.9-minimal@sha256:96aef88435673089451d3ca68780d3f68936f19a03b15b685bff54e55b6ef3a5 AS ca
 
-ENV GOPATH=/go
-ENV CGO_ENABLED=0
+FROM golang:1.27.4@sha256:205c7636d74e0ffbe3d007162df7d74f859f5a8c8322dfb9f907977686c126cf AS build
 
-WORKDIR /build
+# RELEASE.<UTC time>[.<suffix>], e.g. RELEASE.2026-11-24T00-00-00Z.aursu.1
+ARG RELEASE=""
 
-# Install curl and minisign
-RUN apk add -U --no-cache ca-certificates && \
-    apk add -U --no-cache curl && \
-    apk add -U --no-cache bash && \
-    go install aead.dev/minisign/cmd/minisign@v0.2.1
+# Static curl, as in the community image (healthchecks call it).
+ARG CURL_VERSION=8.21.0
+ARG CURL_SHA256=e45ae1805ceb3f816e9768fbbaba05d98a2dc9c5577f66395f37660941d88e19
 
-# Download minio binary and signature files
-RUN curl -s -q https://dl.min.io/server/minio/release/linux-${TARGETARCH}/archive/minio.${RELEASE} -o /go/bin/minio && \
-    curl -s -q https://dl.min.io/server/minio/release/linux-${TARGETARCH}/archive/minio.${RELEASE}.minisig -o /go/bin/minio.minisig && \
-    curl -s -q https://dl.min.io/server/minio/release/linux-${TARGETARCH}/archive/minio.${RELEASE}.sha256sum -o /go/bin/minio.sha256sum && \
-    chmod +x /go/bin/minio
+WORKDIR /src
+COPY . .
 
-# Download mc binary and signature files
-RUN curl -s -q https://dl.min.io/client/mc/release/linux-${TARGETARCH}/mc -o /go/bin/mc && \
-    curl -s -q https://dl.min.io/client/mc/release/linux-${TARGETARCH}/mc.minisig -o /go/bin/mc.minisig && \
-    curl -s -q https://dl.min.io/client/mc/release/linux-${TARGETARCH}/mc.sha256sum -o /go/bin/mc.sha256sum && \
-    chmod +x /go/bin/mc
+# gen-ldflags takes the release time in RFC 3339 and joins the suffix with
+# "."; cmd.Version gets the bare time (it goes into xl.meta), the suffix
+# only reaches cmd.ReleaseTag.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    set -eu; \
+    if [ -n "$RELEASE" ]; then \
+        release_name="${RELEASE#RELEASE.}"; \
+        release_time="${release_name%%.*}"; \
+        release_suffix="${release_name#"$release_time"}"; \
+        export MINIO_RELEASE=RELEASE MINIO_HOTFIX="${release_suffix#.}"; \
+        set -- "${release_time%%T*}T$(echo "${release_time#*T}" | tr - :)"; \
+    fi; \
+    ldflags="$(go run buildscripts/gen-ldflags.go "$@")"; \
+    CGO_ENABLED=0 go build -tags kqueue -trimpath -ldflags "$ldflags" -o /out/bin/minio; \
+    /out/bin/minio --version
 
-# Verify binary signature using public key "RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGavRUN"
-RUN minisign -Vqm /go/bin/minio -x /go/bin/minio.minisig -P RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav && \
-    minisign -Vqm /go/bin/mc -x /go/bin/mc.minisig -P RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav
+# mc from aursu/mc at the commit the test scripts use.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    buildscripts/install-mc.sh /out/bin/mc
 
-COPY dockerscripts/download-static-curl.sh /build/download-static-curl
-RUN chmod +x /build/download-static-curl && \
-    /build/download-static-curl
+RUN set -eu; \
+    curl -fsSL -o /out/bin/curl \
+        "https://github.com/moparisthebest/static-curl/releases/download/v${CURL_VERSION}/curl-amd64"; \
+    echo "${CURL_SHA256}  /out/bin/curl" | sha256sum -c -; \
+    chmod 0755 /out/bin/curl
 
-FROM registry.access.redhat.com/ubi9/ubi-micro:latest
+# <binary>.sha256sum as the community image has them:
+# "<sha256> <binary>.<release tag>".
+RUN set -eu; cd /out/bin; \
+    for binary in minio mc; do \
+        release_tag="$(./"$binary" --version | head -n 1 | cut -d ' ' -f 3)"; \
+        printf '%s %s.%s\n' "$(sha256sum "$binary" | cut -d ' ' -f 1)" "$binary" "$release_tag" > "$binary.sha256sum"; \
+    done; \
+    cat minio.sha256sum mc.sha256sum
 
-ARG RELEASE
+# Files and directories with the community image's modes; COPY --chmod
+# would apply the file mode to a directory it creates as well.
+COPY --from=ca /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /out/certs/ca-certificates.crt
+RUN chmod 0644 /out/certs/ca-certificates.crt && \
+    install -D -m 0664 CREDITS /out/licenses/CREDITS && \
+    install -D -m 0664 LICENSE /out/licenses/LICENSE
+
+FROM quay.io/rockylinux/rockylinux:9-ubi-micro@sha256:9d483f0d6b73d0e85e2a90d5a9e81e81602a49bb2ba069e8930d1a8a3ce3dc57
+
+ARG RELEASE=""
 
 LABEL name="MinIO" \
-      vendor="MinIO Inc <dev@min.io>" \
-      maintainer="MinIO Inc <dev@min.io>" \
       version="${RELEASE}" \
       release="${RELEASE}" \
       summary="MinIO is a High Performance Object Storage, API compatible with Amazon S3 cloud storage service." \
-      description="MinIO object storage is fundamentally different. Designed for performance and the S3 API, it is 100% open-source. MinIO is ideal for large, private cloud environments with stringent security requirements and delivers mission-critical availability across a diverse range of workloads."
+      description="MinIO object storage is fundamentally different. Designed for performance and the S3 API, it is 100% open-source. MinIO is ideal for large, private cloud environments with stringent security requirements and delivers mission-critical availability across a diverse range of workloads." \
+      org.opencontainers.image.source="https://github.com/aursu/minio" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
+      org.opencontainers.image.version="${RELEASE}"
 
 ENV MINIO_ACCESS_KEY_FILE=access_key \
     MINIO_SECRET_KEY_FILE=secret_key \
@@ -57,16 +95,13 @@ ENV MINIO_ACCESS_KEY_FILE=access_key \
 
 RUN chmod -R 777 /usr/bin
 
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=build /go/bin/minio* /usr/bin/
-COPY --from=build /go/bin/mc* /usr/bin/
-COPY --from=build /go/bin/curl* /usr/bin/
+COPY --from=build /out/certs/ /etc/ssl/certs/
+COPY --from=build /out/bin/ /usr/bin/
 
-COPY CREDITS /licenses/CREDITS
-COPY LICENSE /licenses/LICENSE
-COPY dockerscripts/docker-entrypoint.sh /usr/bin/docker-entrypoint.sh
+COPY --from=build /out/licenses/ /licenses/
+COPY --chmod=0775 dockerscripts/docker-entrypoint.sh /usr/bin/docker-entrypoint.sh
 
-EXPOSE 9000
+EXPOSE 9000 9001
 VOLUME ["/data"]
 
 ENTRYPOINT ["/usr/bin/docker-entrypoint.sh"]
