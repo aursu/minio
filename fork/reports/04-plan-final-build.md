@@ -50,6 +50,14 @@ Date: 2026-11-19. Supersedes [02-plan](02-plan.md); facts from
 - **Image build:** a workflow of our own in `aursu/minio`, not upstream's
   release pipeline.
 - **IdP for the SSO check:** Keycloak.
+- **Image layout:** where a choice has no other answer (user, ports,
+  env, paths, file modes), the image does what the community image of
+  the last full-console releases does (console v1.7.6, up to
+  `RELEASE.2025-04-22T22-12-26Z`; reference: the fork's copy of
+  `RELEASE.2025-03-12T18-04-18Z`, same runtime layout): root, `EXPOSE
+  9000`. Security removals take precedence: no `chmod -R 777 /usr/bin`,
+  no MinIO minisign key, no unpinned static curl, no MinIO Inc labels.
+  linux/amd64 only. Details in `fork/notes/17-release-image.md`.
 
 ## Pull-request rules
 
@@ -273,10 +281,12 @@ anything touching IAM, STS, OIDC, LDAP, console, HTTP or dependencies.
 
 3.1 `Dockerfile` for the fork: builder `golang:1.27`, version stamped through
     `buildscripts/gen-ldflags.go`, runtime base Rocky `9-ubi-micro` by
-    digest, non-root user, `mc` from `aursu/mc`. Smoke test of the built
-    image: starts as non-root, `mc ready`, an object written and read
-    back, `mc admin info` shows the release time and `minio --version`
-    the full tag, console login through Keycloak.
+    digest, layout of the full-console community image (see "Image
+    layout" above), `mc` from `aursu/mc`. Smoke test of the built image:
+    starts, `mc ready`, an object written and read back, `mc admin info`
+    shows the release time and `minio --version` the full tag, console
+    login through Keycloak. `Dockerfile.release` and note 17: #41; the
+    Keycloak login check follows.
 3.2 Release: tag in `aursu/minio`, image published to `ghcr.io/aursu/minio`
     by our own workflow, release report with the `govulncheck`, UI audit
     and OSV state. The first release waits for phase 4 item 1.
