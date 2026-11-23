@@ -133,4 +133,32 @@ locally; a CI checkout is shallow).
   `https://s3.amazonaws.com` with invented keys fails on the access key,
   not on the certificate.
 
-Not tested yet: console login through Keycloak (3.1, next).
+### Console login through Keycloak
+
+`fork/test/bin/sso-smoke.sh <image>` (added here; README in `fork/test`).
+Keycloak 26.8.2 in dev mode, realm `minio`, confidential client `minio`,
+a fixed `policy` claim in the tokens; the image with
+`MINIO_IDENTITY_OPENID_*` and `MINIO_BROWSER_REDIRECT_URL`. A curl client
+on the same network walks the console's flow: `GET /api/v1/login` →
+Keycloak's login form → `/oauth_callback` with code and state → `POST
+/api/v1/login/oauth2/auth` → session cookie → admin API calls.
+
+| Claim | Login | Session | `admin/info`, `users`, `groups`, `policies` |
+|---|---|---|---|
+| `policy=consoleAdmin` | 204, cookie | ok | 200 ×4 |
+| `policy=readonly` | 204, cookie | ok | 403 ×4 |
+
+The second login is the control: the rights come from the IdP's claim.
+The script asserts both rows and exits non-zero otherwise; a copy with
+the first expectation inverted failed as it should, printing the
+mismatch and the server's log.
+
+- 2026-11-23, media-gw: 3 runs of the script, all `PASS`; earlier 8 runs
+  of a scratch version (4 per claim), all as in the table. Keycloak up in
+  9 s, the server ready in 1–2 s.
+- One earlier scratch run failed: the server's console port did not
+  answer and its log was lost with the container. The host's Docker disk
+  was then at 89–92 % (Keycloak had failed twice with `No space left on
+  device` in the same hour); after the disk was enlarged no run failed.
+  The script now waits at most 120 s explicitly and prints the server's
+  state and log on any failure.
