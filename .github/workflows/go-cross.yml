@@ -18,6 +18,7 @@ jobs:
   build:
     name: Build Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       matrix:
         os: [ubuntu-24.04]

@@ -18,6 +18,7 @@ jobs:
   replication-test:
     name: Advanced Tests
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
