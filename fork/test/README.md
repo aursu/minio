@@ -11,7 +11,7 @@ cover. GitHub Actions remains the PR gate (plan 04, step 0.2).
 | Script | Runs | Baseline (unchanged tree) |
 |---|---|---|
 | `bin/unit-tests.sh` | server `go test`, flags as `make test` | all packages pass |
-| `bin/sso-smoke.sh <image>` | console login through Keycloak: `policy=consoleAdmin` → admin API 200, `policy=readonly` → 403 | `PASS` (note 17) |
+| `bin/sso-smoke.sh <image>` | console login through Keycloak: `policy=consoleAdmin` → admin API 200, `policy=readonly` → 403; STS: Keycloak `id_token` → credentials, HS256 token forged with the client secret → refused (CVE-2026-33322) | `PASS` (notes 17, 19) |
 
 `unit-tests.sh` logs land in `results/` (gitignored); `sso-smoke.sh` prints
 to the terminal, with the server's log on failure. Exit status is the test
