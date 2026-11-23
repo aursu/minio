@@ -12,7 +12,44 @@ Date: 2026-11-19. Supersedes [02-plan](02-plan.md); facts from
 - Fixes for the open server advisories are **our own code** — no original
   fix exists (MinIO ships them only in closed AIStor).
 - Order: the final build (full console, current dependencies, image) first;
-  the security fixes afterwards, on top of it.
+  the security fixes afterwards, on top of it. **Changed 2026-11-23**, see
+  below.
+
+## Decisions taken (2026-11-23)
+
+- **Order, for a first image deployable with SSO.** After 2.4 group 1
+  (#39): phase 3 (image and its workflow), then phase 4 item 1
+  (CVE-2026-33322, OIDC JWT algorithm confusion: it sits on the SSO
+  login path), then the first release. The rest of 2.4 and phase 4 items
+  2–6 follow as later releases.
+- **Runtime base:** `quay.io/rockylinux/rockylinux:9-ubi-micro`, pinned by
+  digest (the tag is rolling; Rocky publishes no versioned tag for it).
+  The same packages as Red Hat's `ubi9/ubi-micro`, which upstream's
+  `Dockerfile.release` uses, except the release ones: `rocky-release`,
+  `rocky-repos` and `rocky-gpg-keys` in place of `redhat-release` and the
+  `gpg-pubkey` entries.
+  Compared on 2026-11-23 with `ubi9/ubi-micro` and
+  `ghcr.io/aursu/rockylinux:9.9.20261112.0-base`: the `-base` image is
+  192 MB against 32, 123 packages against 23, and carries `microdnf`,
+  `rpm`, curl and eight setuid binaries the server does not need. Neither
+  micro image has a CA bundle; it is copied from the build stage, as
+  upstream does. Rocky 9, not 10: el10 needs an x86-64-v3 CPU.
+- **Registry:** `ghcr.io/aursu/minio`.
+- **Version string:** `RELEASE.<UTC time>.aursu.N`, e.g.
+  `RELEASE.2026-11-24T00-00-00Z.aursu.1`: upstream's hotfix form,
+  stamped by `buildscripts/gen-ldflags.go` with `MINIO_RELEASE=RELEASE`
+  and `MINIO_HOTFIX=aursu.N`, no code change. The suffix goes into
+  `cmd.ReleaseTag` only (`minio --version`, the banner, User-Agents);
+  `cmd.Version` stays the bare RFC3339 time, because it is written into
+  every `xl.meta` as `WrittenByVersion` and decides `IsSourceBuild()`.
+  `mc admin info` shows `cmd.Version`, so the time only.
+  - The first draft had `-aursu.N`. Rejected on 2026-11-23 after the
+    3.1 check: `releaseTagToReleaseTime` splits on `.` and fails on
+    `…Z-aursu` ("extra text"), and gen-ldflags always joins the hotfix
+    suffix with `.`; keeping the dash would need our own code in both.
+- **Image build:** a workflow of our own in `aursu/minio`, not upstream's
+  release pipeline.
+- **IdP for the SSO check:** Keycloak.
 
 ## Pull-request rules
 
@@ -235,19 +272,23 @@ anything touching IAM, STS, OIDC, LDAP, console, HTTP or dependencies.
 ## Phase 3 — final build
 
 3.1 `Dockerfile` for the fork: builder `golang:1.27`, version stamped through
-    `buildscripts/gen-ldflags.go`, minimal runtime base, non-root user.
-3.2 Release: tag in `aursu/minio`, image published, release report with the
-    `govulncheck`, UI audit and OSV state.
+    `buildscripts/gen-ldflags.go`, runtime base Rocky `9-ubi-micro` by
+    digest, non-root user, `mc` from `aursu/mc`. Smoke test of the built
+    image: starts as non-root, `mc ready`, an object written and read
+    back, `mc admin info` shows the release time and `minio --version`
+    the full tag, console login through Keycloak.
+3.2 Release: tag in `aursu/minio`, image published to `ghcr.io/aursu/minio`
+    by our own workflow, release report with the `govulncheck`, UI audit
+    and OSV state. The first release waits for phase 4 item 1.
 
-Open, decided at 3.1: runtime base image, registry (e.g. `ghcr.io/aursu`),
-version string format (`mc admin info` parses `RELEASE.<time>`), whether
-upstream CI runs in the fork or a workflow of our own builds the image.
+The decisions for both steps are under "Decisions taken (2026-11-23)".
 
 ## Phase 4 — security fixes (own code)
 
 One PR per advisory, test first: a regression test that reproduces the
 exploit and fails on `master`; the smallest fix that makes it pass; full
 suites green; note in `fork/notes/`. Release after each, or after the group.
+Item 1 goes before the first release (decided 2026-11-23); 2–6 after it.
 
 | Order | CVE | Area |
 |---|---|---|
