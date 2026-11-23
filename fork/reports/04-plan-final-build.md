@@ -285,11 +285,15 @@ anything touching IAM, STS, OIDC, LDAP, console, HTTP or dependencies.
     layout" above), `mc` from `aursu/mc`. Smoke test of the built image:
     starts, `mc ready`, an object written and read back, `mc admin info`
     shows the release time and `minio --version` the full tag, console
-    login through Keycloak. `Dockerfile.release` and note 17: #41; the
-    Keycloak login check follows.
+    login through Keycloak. **Done** (#41, merged 2026-11-23):
+    `Dockerfile.release`, note 17, `fork/test/bin/sso-smoke.sh`.
 3.2 Release: tag in `aursu/minio`, image published to `ghcr.io/aursu/minio`
     by our own workflow, release report with the `govulncheck`, UI audit
     and OSV state. The first release waits for phase 4 item 1.
+    - Workflow `.github/workflows/release-image.yml` and note 18: tag
+      `RELEASE.<time>.aursu.N` → build, version check, SSO smoke test,
+      push of the checked image as `:<tag>` and `:latest`.
+    - The release report is written per release in `fork/reports/`.
 
 The decisions for both steps are under "Decisions taken (2026-11-23)".
 
