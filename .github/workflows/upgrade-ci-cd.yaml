@@ -18,6 +18,7 @@ jobs:
   build:
     name: Upgrade from ${{ matrix.old.version }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:

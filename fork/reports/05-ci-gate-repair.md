@@ -111,6 +111,14 @@ starting the old server.
   took 9 and passed. Making the script print those logs and bound the wait
   would turn the next occurrence into an explained failure, as note 09 did
   for the upgrade test.
+- **Root lockdown (`test-root-disable`), the same shape.** #36 on
+  2026-11-22: `./mc ready sitea` in `buildscripts/disable-root.sh` got "not
+  ready" for 10 minutes, then `connection refused` on 127.0.0.1:9001 until a
+  push cancelled the run after 2 h 18 min. The next run passed in 4 min. Note
+  15: every job now has `timeout-minutes`, and this script's waits stop
+  after 120 s and print the site's server logs, so the next occurrence fails
+  in minutes with its cause in the output. The replication scripts above
+  still wait without a bound and are capped only by their job's limit.
 - **Upgrade, `test-upgrade`.** The upgrade itself works. In a local
   reproduction (repo `compose.yml`, 4 nodes + nginx), switching from 2019 to
   this tree: about 13 s of 502/InternalError, then the correct content for 2

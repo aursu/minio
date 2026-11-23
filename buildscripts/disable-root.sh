@@ -28,10 +28,24 @@ if [ ! -f ./mc ]; then
 	"${BASH_SOURCE[0]%/*}/install-mc.sh" ./mc || exit 1
 fi
 
+# "mc ready" polls until the cluster answers and has no limit of its own: a
+# site that never came up once kept this job polling for over two hours. A
+# healthy start takes up to 10 seconds here, so the wait stops at 120 and the
+# servers' logs are printed, since they are not in the job's output otherwise.
+wait_ready() {
+	local alias="$1"
+	shift
+	if ! timeout 120 ./mc ready "$alias"; then
+		echo "cluster '$alias' not ready within 120s, server logs follow"
+		tail -n 100 "$@"
+		exit 1
+	fi
+}
+
 set +e
 
 export MC_HOST_minioadm=http://minioadmin:minioadmin@localhost:9100/
-./mc ready minioadm
+wait_ready minioadm /tmp/log0.txt /tmp/log1.txt /tmp/log2.txt /tmp/log3.txt
 
 ./mc ls minioadm/
 
@@ -56,7 +70,7 @@ done
 
 set +e
 
-./mc ready minioadm/
+wait_ready minioadm/ /tmp/log0.txt /tmp/log1.txt /tmp/log2.txt /tmp/log3.txt
 
 ./mc ls minioadm/
 if [ $? -ne 0 ]; then
@@ -84,8 +98,8 @@ minio server --address 127.0.0.1:9004 "http://127.0.0.1:9003/tmp/multisiteb/data
 export MC_HOST_sitea=http://minioadmin:minioadmin@127.0.0.1:9001
 export MC_HOST_siteb=http://minioadmin:minioadmin@127.0.0.1:9004
 
-./mc ready sitea
-./mc ready siteb
+wait_ready sitea /tmp/sitea_1.log /tmp/sitea_2.log
+wait_ready siteb /tmp/siteb_1.log /tmp/siteb_2.log
 
 ./mc admin replicate add sitea siteb
 
@@ -113,8 +127,8 @@ minio server --address 127.0.0.1:9004 "http://127.0.0.1:9003/tmp/multisiteb/data
 export MC_HOST_sitea=http://foobar:foo12345@127.0.0.1:9001
 export MC_HOST_siteb=http://foobar:foo12345@127.0.0.1:9004
 
-./mc ready sitea
-./mc ready siteb
+wait_ready sitea /tmp/sitea_1.log /tmp/sitea_2.log
+wait_ready siteb /tmp/siteb_1.log /tmp/siteb_2.log
 
 ./mc admin user add sitea foobar-admin foo12345
 
