@@ -297,17 +297,21 @@ anything touching IAM, STS, OIDC, LDAP, console, HTTP or dependencies.
 
 The decisions for both steps are under "Decisions taken (2026-11-23)".
 
-## Phase 4 — security fixes (own code)
+## Phase 4 — security fixes (public fixes first)
 
-One PR per advisory, test first: a regression test that reproduces the
-exploit and fails on `master`; the smallest fix that makes it pass; full
-suites green; note in `fork/notes/`. Release after each, or after the group.
+Per advisory, the public fixes in other forks are compared (pgsty/silo,
+relvo-labs/granary, jarvit/minio-image, any others found) and the best
+one is cherry-picked with `-x`, author kept; our own code only where no
+public fix exists (decided 2026-11-23, after item 1). One PR per
+advisory, test first: the regression tests reproduce the exploit and fail
+on `master`, pass with the fix; full suites green; note in `fork/notes/`
+with the comparison. Release after each, or after the group.
 Item 1 goes before the first release (decided 2026-11-23); 2–6 after it.
 
 | Order | CVE | Area |
 |---|---|---|
 | 1 | CVE-2026-33322 | OIDC JWT algorithm confusion (the SSO path) — cherry-pick of relvo-labs/granary `f54f82e1bf69`, note 19 |
-| 2 | CVE-2026-40344, CVE-2026-41145 | unsigned-trailer uploads written without signature |
+| 2 | CVE-2026-40344, CVE-2026-41145 | unsigned-trailer uploads written without signature — cherry-pick of relvo-labs/granary `ea5efbdf53b6`, `2bd3cbd9f88b`, `a02d3dd81517`, note 20 |
 | 3 | CVE-2026-34204 | SSE metadata injection via replication headers |
 | 4 | CVE-2026-39414 | S3 Select CSV unbounded line → OOM |
 | 5 | CVE-2026-33419 | LDAP STS enumeration + rate limit |
@@ -322,4 +326,5 @@ AIStor-only advisories keep appearing.
   is a rewrite, not a bump. (Corrected 2026-11-21: react-router was moved
   to 7 in 1.5, aursu/console #21; this line still said 6.)
 - `mds` stays at v1.0.4.
-- Flaws in MinIO's own code found later need our own patches again.
+- Flaws in MinIO's own code found later need a patch again: a public one
+  where a fork has it, ours otherwise.
