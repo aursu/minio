@@ -20,6 +20,7 @@ extend-ignore-re = [
 [default.extend-words]
 "encrypter" = "encrypter"
 "kms" = "kms"
+"mosquitto" = "mosquitto"
 "requestor" = "requestor"
 
 [default.extend-identifiers]

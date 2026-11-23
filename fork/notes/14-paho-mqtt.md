@@ -24,6 +24,14 @@ is MinIO's MQTT notification target (`internal/event/target/mqtt.go`,
 client id, user name and password, all from MinIO's own configuration. The
 event payload does not go through `encodeBytes`.
 
+`.typos.toml` gains `mosquitto` as a known word. The broker used in the
+tests below is Mosquitto, and typos 1.50.2 (the CI's "Spell Check with
+Typos") reads the name as a misspelling of "mosquito" and fails the PR.
+The word goes into the shared list rather than a per-line
+`spellchecker:disable-line` marker, which in a Markdown table or sentence
+would show up as text; `docs/` already names Mosquitto but is excluded
+from the check.
+
 ## What else changed in 1.5.1, against MinIO's use
 
 The whole diff from 1.5.0 was read (`client.go`, `net.go`, `netconn.go`,
@@ -60,6 +68,7 @@ On the build host, Go 1.27.4:
 | `make verifiers` (golangci-lint v2.15.0, check-gen) | 0 issues, clean after check-gen |
 | govulncheck v1.10.0 | reachable 11 → 10: the paho finding is gone; the 10 left are amqp091-go, fixed by note 13's PR |
 | unit suite (`fork/test`) | PASS, 46 packages |
+| typos 1.50.2, whole tree | without the `.typos.toml` entry: 2 errors (`Mosquitto`, `mosquitto` in this note), rc 2; with it: rc 0 |
 
 Against a real broker, Mosquitto 2.0.22, master (paho 1.5.0) and this branch
 built from source. Target `PRIMARY`, broker `tcp://127.0.0.1:1883`, topic
