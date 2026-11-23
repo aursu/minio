@@ -16,49 +16,63 @@ stays as it is.
 build interface keeps upstream's `ARG RELEASE`. Only linux/amd64 is built
 (Alexander, 2026-11-23: no arm64).
 
-**The image is the community image with our binaries** (Alexander,
-2026-11-23: user ids, settings and configuration as in the current
-image). The reference is the last community release,
-`minio/minio:RELEASE.2025-03-12T18-04-18Z` (fork copy
-`ghcr.io/aursu/minio/minio`, the base of the plain `Dockerfile`). Taken
-from it unchanged:
+**Reference: the community image of the last releases with the full
+console.** Console v1.7.6 shipped up to `RELEASE.2025-04-22T22-12-26Z`;
+that image is no longer published anywhere (ghcr fork copy, quay.io,
+Docker Hub checked 2026-11-23). Between `RELEASE.2025-03-12T18-04-18Z`
+and it, upstream's `Dockerfile.release` changed only the build stage's Go
+image (`2b34e5b9a`), so the fork's copy of 2025-03-12
+(`ghcr.io/aursu/minio/minio`, base of the plain `Dockerfile`) has the same
+runtime layout and is used as the reference.
+
+Alexander's rule (2026-11-23): the security decisions below stand; every
+other question about the image is answered the way the reference answers
+it. Taken from it unchanged:
 
 - runs as root (no `USER`), `WorkingDir /`;
-- the same `ENV`, including `MINIO_UPDATE_MINISIGN_PUBKEY`;
-- `RUN chmod -R 777 /usr/bin` before the binaries are copied, so the base
-  image's files are 0777 and `minio`, `mc`, `curl` 0755, as there;
+- `EXPOSE 9000` (the console port is set by `--console-address`);
+- `ENV`, less the minisign key;
 - `/usr/bin/docker-entrypoint.sh` 0775, unchanged script;
 - the CA bundle at `/etc/ssl/certs/ca-certificates.crt` 0644;
 - `/licenses/{CREDITS,LICENSE}` 0664 in a 0755 directory;
 - `/usr/bin/{minio,mc}.sha256sum` in the same format,
   `<sha256> <binary>.<release tag>`;
-- a static curl in `/usr/bin` (healthchecks call it);
 - `VOLUME /data`, `ENTRYPOINT`, `CMD ["minio"]`;
 - the `name`, `version`, `release`, `summary`, `description` labels.
 
-Differences, each deliberate:
+Removed, for security:
 
-| What | Community image | Here | Why |
-|---|---|---|---|
-| Base | Red Hat `ubi9/ubi-micro` 9.5 | Rocky `9-ubi-micro` 9.9 | plan 04, "Decisions taken (2026-11-23)" |
-| `EXPOSE` | 9000 | 9000 9001 | the console is the reason for the fork (accepted 2026-11-23) |
-| `minio`, `mc` | dl.min.io, minisign-verified | built here; mc = aursu/mc at `RELEASE.2025-08-13T08-35-41Z` | dl.min.io is gone |
-| `*.minisig` | present | absent | made with MinIO's signing key, which we do not have |
-| curl | 8.11.0, `releases/latest` at build time | 8.21.0, pinned version and sha256 | pinned, current; same source (moparisthebest/static-curl) |
-| CA bundle | Alpine's | Rocky's (`9.9-minimal`) | plan 04 |
-| `vendor`, `maintainer` labels | MinIO Inc | absent | this image is not theirs |
-| OCI labels | none | `source`, `licenses`, `version` | provenance |
+- `chmod -R 777 /usr/bin`: added upstream in September 2024
+  (`f05641c3c` as `1777`, then `229f04ab7` "fixes minio/operator#2319");
+  the commits give no reason. The one runtime writer of that directory is
+  the server's self-update (`mc admin update`: `selfupdate` replaces
+  `os.Executable()`, downloaded from dl.min.io unless a URL is given). In
+  a container that replacement lives in the container layer and is lost
+  on re-creation; the price was every binary in the image
+  world-writable. `/usr/bin` keeps the base image's mode (0555).
+- `MINIO_UPDATE_MINISIGN_PUBKEY` and the `*.minisig` files: MinIO's
+  signing key; these binaries are not signed with it.
+- The static curl: downloaded unpinned (`releases/latest`) from a
+  third-party repository. A healthcheck can run `mc ready local` inside
+  the container (tested below).
+- `vendor`/`maintainer` labels naming MinIO, Inc.: this image is not
+  theirs. OCI `source`, `licenses`, `version` labels added.
 
-Checked by diffing `docker image inspect .Config` and `stat` of every path
-above between the two images: the only differences are `9001/tcp` and
-the missing `.minisig` files.
+Other differences: base Rocky `9-ubi-micro` 9.9 instead of Red Hat
+`ubi9/ubi-micro` 9.5, Rocky's CA bundle instead of Alpine's (plan 04,
+"Decisions taken (2026-11-23)"); `mc` is aursu/mc
+`RELEASE.2025-08-13T08-35-41Z`.
+
+Checked by diffing `docker image inspect .Config` and `stat` of the
+image's paths against the reference: the only differences are the ones
+removed above.
 
 ### Build stages
 
 | Stage | Image (tag + digest) | Gives |
 |---|---|---|
 | `ca` | `quay.io/rockylinux/rockylinux:9.9-minimal` | the CA bundle |
-| `build` | `golang:1.27.4` | `minio` (static, `-tags kqueue -trimpath`, as `make build`), `mc`, curl, checksum files, files with their final modes |
+| `build` | `golang:1.27.4` | `minio` (static, `-tags kqueue -trimpath`, as `make build`), `mc`, checksum files, files with their final modes |
 | runtime | `quay.io/rockylinux/rockylinux:9-ubi-micro` (Rocky 9.9) | the image |
 
 - **Version.** `RELEASE=RELEASE.<UTC time>.aursu.N` is split into the
@@ -79,14 +93,12 @@ the missing `.minisig` files.
 
 ## Alternatives rejected
 
-- **A non-root image** (first draft: `USER 1000:1000`, no `chmod -R 777
-  /usr/bin`, no curl, no upstream signing key): replaced by the reference
-  layout on Alexander's decision, so that existing deployments of the
-  community image take this one without changes. The first draft's
-  arguments stay true and are recorded here: `chmod -R 777 /usr/bin`
-  (upstream `f05641c3c`, `229f04ab7`, September 2024, no reason given)
-  leaves every binary world-writable; its one runtime user is the
-  server's self-update, which in a container is lost on re-creation.
+- **A non-root image** (first draft: `USER 1000:1000`, `/data` owned by
+  it, `EXPOSE 9000 9001`): not the reference's answer. Existing
+  deployments of the community image keep working unchanged.
+- **The reference copied in full** (second draft: also `chmod -R 777
+  /usr/bin`, the minisign key, a static curl pinned to 8.21.0): the
+  security decisions above take precedence.
 - **Commit ID without `.git`:**
   - ldflags computed on the host and passed as a build argument:
     gen-ldflags would also stamp the host's `GOPATH`/`GOROOT`, and a local
@@ -96,8 +108,6 @@ the missing `.minisig` files.
     different commits;
   - gen-ldflags reading the commit from an environment variable: own code
     for something BuildKit already solves.
-- **curl 8.11.0**, the reference's version: identical, but two years of
-  curl fixes older; the image's purpose is security upgrades.
 - Runtime base `ghcr.io/aursu/rockylinux:*-base` and Rocky 10: plan 04
   "Decisions taken (2026-11-23)".
 
@@ -108,19 +118,18 @@ uncached build took 1 min 22 s, context 218 MB (`.git` is 137 MB of it
 locally; a CI checkout is shallow).
 
 - `minio --version` in the build and in the container:
-  `RELEASE.2026-11-23T00-00-00Z.aursu.0 (commit-id=7e5ca3bc…)`; the start-up
+  `RELEASE.2026-11-23T00-00-00Z.aursu.0 (commit-id=…)`; the start-up
   banner shows the same tag and `go1.27.4 linux/amd64`.
 - `minio.sha256sum`: `… minio.RELEASE.2026-11-23T00-00-00Z.aursu.0`;
   `mc.sha256sum`: `… mc.RELEASE.2025-08-13T08-35-41Z`.
-- curl download checked against the pinned sha256 (`OK`).
 - Config and file modes diffed against the reference: see above.
 - A named volume on `/data`: `mc ready`, `mc mb`, `mc cp`, `mc cat`, the
   object read back unchanged.
 - `mc admin info`: `Version: 2026-11-23T00:00:00Z`; `--json` gives the
-  full `commitID` (first draft's run).
-- Inside the container: `id` = root; `curl` to
-  `/minio/health/live` → 200, console `:9001/` → 200, `https://github.com/`
-  → 200 (the CA bundle works for curl); Go's TLS: `mc alias set` against
+  full `commitID`.
+- Console `:9001/` → `200 OK`.
+- Inside the container: `id` = root; `mc ready local` → ready, exit 0.
+- Go's TLS with the Rocky bundle: `mc alias set` against
   `https://s3.amazonaws.com` with invented keys fails on the access key,
   not on the certificate.
 

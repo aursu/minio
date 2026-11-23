@@ -1,10 +1,12 @@
 # Release image of the fork (ghcr.io/aursu/minio), linux/amd64.
 #
-# The runtime layout, user, environment, entrypoint and volume are those of
-# the last community image, minio/minio:RELEASE.2025-03-12T18-04-18Z (fork
-# copy ghcr.io/aursu/minio/minio); only the binaries are built here, from
-# source: dl.min.io, which upstream's version of this file downloaded
-# from, answers 410.
+# User, ports, environment, entrypoint, volume and file modes are those of
+# the community image of the last releases with the full console (up to
+# RELEASE.2025-04-22T22-12-26Z; fork copy of RELEASE.2025-03-12T18-04-18Z
+# in ghcr.io/aursu/minio/minio), less what it carried for dl.min.io self
+# updates (world-writable /usr/bin, MinIO's minisign key) and its unpinned
+# static curl. The binaries are built here, from source: dl.min.io, which
+# upstream's version of this file downloaded from, answers 410.
 #
 #   docker build -f Dockerfile.release \
 #     --build-arg RELEASE=RELEASE.2026-11-24T00-00-00Z.aursu.1 -t <tag> .
@@ -19,10 +21,6 @@ FROM golang:1.27.4@sha256:205c7636d74e0ffbe3d007162df7d74f859f5a8c8322dfb9f90797
 
 # RELEASE.<UTC time>[.<suffix>], e.g. RELEASE.2026-11-24T00-00-00Z.aursu.1
 ARG RELEASE=""
-
-# Static curl, as in the community image (healthchecks call it).
-ARG CURL_VERSION=8.21.0
-ARG CURL_SHA256=e45ae1805ceb3f816e9768fbbaba05d98a2dc9c5577f66395f37660941d88e19
 
 WORKDIR /src
 COPY . .
@@ -48,12 +46,6 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     buildscripts/install-mc.sh /out/bin/mc
-
-RUN set -eu; \
-    curl -fsSL -o /out/bin/curl \
-        "https://github.com/moparisthebest/static-curl/releases/download/v${CURL_VERSION}/curl-amd64"; \
-    echo "${CURL_SHA256}  /out/bin/curl" | sha256sum -c -; \
-    chmod 0755 /out/bin/curl
 
 # <binary>.sha256sum as the community image has them:
 # "<sha256> <binary>.<release tag>".
@@ -89,11 +81,8 @@ ENV MINIO_ACCESS_KEY_FILE=access_key \
     MINIO_ROOT_USER_FILE=access_key \
     MINIO_ROOT_PASSWORD_FILE=secret_key \
     MINIO_KMS_SECRET_KEY_FILE=kms_master_key \
-    MINIO_UPDATE_MINISIGN_PUBKEY="RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav" \
     MINIO_CONFIG_ENV_FILE=config.env \
     MC_CONFIG_DIR=/tmp/.mc
-
-RUN chmod -R 777 /usr/bin
 
 COPY --from=build /out/certs/ /etc/ssl/certs/
 COPY --from=build /out/bin/ /usr/bin/
@@ -101,7 +90,7 @@ COPY --from=build /out/bin/ /usr/bin/
 COPY --from=build /out/licenses/ /licenses/
 COPY --chmod=0775 dockerscripts/docker-entrypoint.sh /usr/bin/docker-entrypoint.sh
 
-EXPOSE 9000 9001
+EXPOSE 9000
 VOLUME ["/data"]
 
 ENTRYPOINT ["/usr/bin/docker-entrypoint.sh"]
