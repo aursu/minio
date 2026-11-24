@@ -46,7 +46,12 @@ client address.
      trusts loopback only. The embedded console and the SFTP and FTP
      servers call the S3 API over loopback and pass the address of their
      own client in `X-Forwarded-For`, so this default keeps their client
-     addresses. An empty value trusts no proxy.
+     addresses. `none` trusts no proxy, and so does an empty value of
+     the config key. **Correction (2026-11-25):** this said "an empty value
+     trusts no proxy" for the environment variable too. MinIO reads an
+     empty environment variable as unset, so `MINIO_API_TRUSTED_PROXIES=`
+     kept the loopback default; the live SFTP check of PR 2 showed it.
+     `none` was added for that.
    - **`api trusted_proxy_header`** (`MINIO_API_TRUSTED_PROXY_HEADER`):
      `x-forwarded-for` (default) or `x-real-ip`. It is configured, not
      guessed. A proxy rewrites only its own header, and any other header

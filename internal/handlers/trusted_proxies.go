@@ -50,11 +50,19 @@ const (
 // of their own client in X-Forwarded-For.
 const DefaultTrustedProxies = "127.0.0.1/32,::1/128"
 
+// TrustNoProxy is the list that trusts no proxy. An empty list does too,
+// but an empty environment variable counts as unset in MinIO, so the
+// environment needs a word for it.
+const TrustNoProxy = "none"
+
 // ParseTrustedProxies parses a comma separated list of IP addresses and
 // CIDR prefixes, and the name of the header those proxies set. An empty
-// list trusts no proxy.
+// list, or TrustNoProxy, trusts no proxy.
 func ParseTrustedProxies(list, header string) (TrustedProxies, error) {
 	var t TrustedProxies
+	if strings.TrimSpace(list) == TrustNoProxy {
+		list = ""
+	}
 	switch header {
 	case ProxyHeaderXForwardedFor, ProxyHeaderXRealIP:
 		t.header = http.CanonicalHeaderKey(header)

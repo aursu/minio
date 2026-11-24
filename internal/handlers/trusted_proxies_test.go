@@ -54,8 +54,10 @@ func TestParseTrustedProxies(t *testing.T) {
 		t.Errorf("header: got %q", tp.header)
 	}
 
-	if tp := mustTrustedProxies(t, "", ProxyHeaderXForwardedFor); len(tp.prefixes) != 0 {
-		t.Errorf("empty list: got %v", tp.prefixes)
+	for _, list := range []string{"", " ", TrustNoProxy, " none "} {
+		if tp := mustTrustedProxies(t, list, ProxyHeaderXForwardedFor); len(tp.prefixes) != 0 {
+			t.Errorf("list %q: got %v", list, tp.prefixes)
+		}
 	}
 	if tp := mustTrustedProxies(t, DefaultTrustedProxies, ProxyHeaderXForwardedFor); len(tp.prefixes) != 2 {
 		t.Errorf("default list: got %v", tp.prefixes)

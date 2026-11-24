@@ -86,6 +86,26 @@ func TestLookupConfigTrustedProxies(t *testing.T) {
 		}
 	})
 
+	// An empty environment variable counts as unset, so "none" is the way
+	// to trust no proxy from the environment.
+	t.Run("environment none trusts no proxy", func(t *testing.T) {
+		t.Setenv(EnvAPITrustedProxies, "")
+		cfg, err := LookupConfig(apiKVS(nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := clientOf(t, cfg, "127.0.0.1"); got != "192.0.2.1" {
+			t.Errorf("empty variable: got %s, want the default list applied", got)
+		}
+		t.Setenv(EnvAPITrustedProxies, "none")
+		if cfg, err = LookupConfig(apiKVS(nil)); err != nil {
+			t.Fatal(err)
+		}
+		if got := clientOf(t, cfg, "127.0.0.1"); got != "127.0.0.1" {
+			t.Errorf("none: got %s", got)
+		}
+	})
+
 	t.Run("environment overrides", func(t *testing.T) {
 		t.Setenv(EnvAPITrustedProxies, "10.0.0.0/8")
 		t.Setenv(EnvAPITrustedProxyHeader, "x-real-ip")

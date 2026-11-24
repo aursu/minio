@@ -148,7 +148,7 @@ odirect                         (boolean)   set to enable or disable O_DIRECT fo
 root_access                     (boolean)   turn 'off' root credential access for all API calls including s3, admin operations (default: 'on')
 sync_events                     (boolean)   set to enable synchronous bucket notifications (default: 'off')
 object_max_versions             (number)    set max allowed number of versions per object (default: '9223372036854775807')
-trusted_proxies                 (csv)       set comma separated list of IP addresses and CIDR prefixes of the proxies whose forwarding header gives the client address; empty trusts no proxy (default: '127.0.0.1/32,::1/128')
+trusted_proxies                 (csv)       set comma separated list of IP addresses and CIDR prefixes of the proxies whose forwarding header gives the client address; "none" or empty trusts no proxy (default: '127.0.0.1/32,::1/128')
 trusted_proxy_header            (string)    set the header the trusted proxies write the client address to, "x-forwarded-for" or "x-real-ip" (default: 'x-forwarded-for')
 ```
 
@@ -170,7 +170,7 @@ MINIO_API_ODIRECT                         (boolean)   set to enable or disable O
 MINIO_API_ROOT_ACCESS                     (boolean)   turn 'off' root credential access for all API calls including s3, admin operations (default: 'on')
 MINIO_API_SYNC_EVENTS                     (boolean)   set to enable synchronous bucket notifications (default: 'off')
 MINIO_API_OBJECT_MAX_VERSIONS             (number)    set max allowed number of versions per object (default: '9223372036854775807')
-MINIO_API_TRUSTED_PROXIES                 (csv)       set comma separated list of IP addresses and CIDR prefixes of the proxies whose forwarding header gives the client address; empty trusts no proxy (default: '127.0.0.1/32,::1/128')
+MINIO_API_TRUSTED_PROXIES                 (csv)       set comma separated list of IP addresses and CIDR prefixes of the proxies whose forwarding header gives the client address; "none" trusts no proxy (an empty variable counts as unset) (default: '127.0.0.1/32,::1/128')
 MINIO_API_TRUSTED_PROXY_HEADER            (string)    set the header the trusted proxies write the client address to, "x-forwarded-for" or "x-real-ip" (default: 'x-forwarded-for')
 ```
 
