@@ -67,6 +67,11 @@ jarvit's names the SFTP and FTP paths. The code here is ours.
   longer says why or names the DN. Administrators find unusual causes
   in the server log.
 - A failed LDAP login takes 1 s by default (`login_failure_delay`).
+- **Logins that try LDAP first pay the delay when they fall back.** The
+  console tries LDAP before its built-in login. SFTP, for a user name
+  without `=ldap` or `=svc`, tries LDAP before the built-in users. With
+  LDAP enabled, a root or built-in-user login through either path takes
+  about 1 s longer. `=svc` on SFTP skips LDAP and the delay.
 
 ## Alternatives rejected
 
