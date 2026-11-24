@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/minio/minio/internal/bpool"
@@ -174,19 +173,11 @@ func (f *Forwarder) modifyRequest(outReq *http.Request, target *url.URL) {
 // headerRewriter is responsible for removing hop-by-hop headers and setting forwarding headers
 type headerRewriter struct{}
 
-// Clean up IP in case if it is ipv6 address and it has {zone} information in it, like
-// "[fe80::d806:a55d:eb1b:49cc%vEthernet (vmxnet3 Ethernet Adapter - Virtual Switch)]:64692"
-func ipv6fix(clientIP string) string {
-	return strings.Split(clientIP, "%")[0]
-}
-
 func (rw *headerRewriter) Rewrite(req *http.Request) {
-	if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
-		clientIP = ipv6fix(clientIP)
-		if req.Header.Get(xRealIP) == "" {
-			req.Header.Set(xRealIP, clientIP)
-		}
-	}
+	// httputil.ReverseProxy appends the peer to X-Forwarded-For itself.
+	// X-Real-IP is set to the client as resolved here, never passed on from
+	// the client, so a deployment that trusts this one can use either header.
+	req.Header.Set(xRealIP, GetSourceIPRaw(req))
 
 	xfProto := req.Header.Get(xForwardedProto)
 	if xfProto == "" {
