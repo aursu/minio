@@ -21,7 +21,7 @@ code:
 
 - `json.PReader`, used on CPUs without AVX2/CLMUL;
 - `simdj.Reader`, used on all other CPUs, which includes media-gw and most
-  servers. `simdjson-go`'s `ParseNDStream` also completes its block with
+  servers. the NDJSON stream parser of `simdjson-go` also completes its block with
   an unbounded `ReadBytes`.
 
 The advisory's only fix is in AIStor, which is closed source and not used
@@ -33,7 +33,7 @@ here.
 |---|---|---|---|---|---|
 | pgsty/silo `3252d5b7f349` + `fd69c89d05d3` (2026-04, 2026-06) | 1 MiB per line, `ReadSlice` loop | same | **removes simdjson for JSON Lines**: every CPU uses PReader | `OverMaxRecordSize`, and every `SelectError` keeps its code. That exposed a writer-ordering race, fixed later in `3598c4305dfd` + `035aa6c201fb` | JSON Lines oversized record, error-code preservation |
 | jarvit/minio-image `0001` (2026-10) | 1 MiB, counted only from the block end | **not covered** | **not covered** | every `SelectError` keeps its code | CSV reader: unbounded input, header, long valid lines; one GZIP case through Evaluate |
-| relvo-labs/granary `a6f9814e5625` + `4dd1885b754f` + `3196f58fb2c7` (2026-11-21) | 1 MiB per **whole** line, counted across the block boundary; on overflow the block is dropped, so no truncated record is emitted | same | **kept**: a `lineLimitReader` wraps the input before `ParseNDStream`, and the third-party parser is not modified | unchanged: `InternalError` carrying the OverMaxRecordSize message | +1034 lines: boundary cases at the limit and at limit+1, CRLF, custom delimiters, quoted newlines, header line, GZIP through Evaluate for CSV, PReader and simdjson |
+| relvo-labs/granary `a6f9814e5625` + `4dd1885b754f` + `3196f58fb2c7` (2026-11-21) | 1 MiB per **whole** line, counted across the block boundary; on overflow the block is dropped, so no truncated record is emitted | same | **kept**: a `lineLimitReader` wraps the input before the `simdjson-go` stream parser, and the third-party parser is not modified | unchanged: `InternalError` carrying the OverMaxRecordSize message | +1034 lines: boundary cases at the limit and at limit+1, CRLF, custom delimiters, quoted newlines, header line, GZIP through Evaluate for CSV, PReader and simdjson |
 
 **Taken: granary's three commits** (recommended, accepted). Reasons:
 
