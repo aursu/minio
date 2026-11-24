@@ -109,6 +109,30 @@ var (
 			Type:        "duration",
 		},
 		config.HelpKV{
+			Key:         LoginBackoff,
+			Description: `wait after a failed login before the same account may try again from the same client address` + defaultHelpPostfix(LoginBackoff),
+			Optional:    true,
+			Type:        "duration",
+		},
+		config.HelpKV{
+			Key:         LoginBackoffFactor,
+			Description: `factor the wait grows by after every further failure in a row; 1 keeps it at login_backoff` + defaultHelpPostfix(LoginBackoffFactor),
+			Optional:    true,
+			Type:        "number",
+		},
+		config.HelpKV{
+			Key:         LoginMaxFailures,
+			Description: `failed logins in a row that lock the account out for that client address; 0 turns the login limits off` + defaultHelpPostfix(LoginMaxFailures),
+			Optional:    true,
+			Type:        "number",
+		},
+		config.HelpKV{
+			Key:         LoginLockout,
+			Description: `how long a lockout lasts; failures are also forgotten this long after the last wait ended` + defaultHelpPostfix(LoginLockout),
+			Optional:    true,
+			Type:        "duration",
+		},
+		config.HelpKV{
 			Key:         config.Comment,
 			Description: config.DefaultComment,
 			Optional:    true,

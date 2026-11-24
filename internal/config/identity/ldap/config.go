@@ -22,8 +22,10 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/minio/madmin-go/v3"
@@ -47,6 +49,10 @@ type Config struct {
 
 	// loginFailureDelay is the least time a failed login takes.
 	loginFailureDelay time.Duration
+
+	// limiter enforces the login limits. It is shared by clones, so that a
+	// clone counts the same failures.
+	limiter *loginLimiter
 }
 
 // Enabled returns if LDAP is enabled.
@@ -63,6 +69,7 @@ func (l *Config) Clone() Config {
 		LDAP:              l.LDAP.Clone(),
 		stsExpiryDuration: l.stsExpiryDuration,
 		loginFailureDelay: l.loginFailureDelay,
+		limiter:           l.limiter,
 	}
 	return cfg
 }
@@ -82,6 +89,10 @@ const (
 	ServerInsecure     = "server_insecure"
 	ServerStartTLS     = "server_starttls"
 	LoginFailureDelay  = "login_failure_delay"
+	LoginBackoff       = "login_backoff"
+	LoginBackoffFactor = "login_backoff_factor"
+	LoginMaxFailures   = "login_max_failures"
+	LoginLockout       = "login_lockout"
 
 	EnvServerAddr         = "MINIO_IDENTITY_LDAP_SERVER_ADDR"
 	EnvSRVRecordName      = "MINIO_IDENTITY_LDAP_SRV_RECORD_NAME"
@@ -164,6 +175,22 @@ var (
 		config.KV{
 			Key:   LoginFailureDelay,
 			Value: "1s",
+		},
+		config.KV{
+			Key:   LoginBackoff,
+			Value: "1s",
+		},
+		config.KV{
+			Key:   LoginBackoffFactor,
+			Value: "2",
+		},
+		config.KV{
+			Key:   LoginMaxFailures,
+			Value: "10",
+		},
+		config.KV{
+			Key:   LoginLockout,
+			Value: "15m",
 		},
 	}
 )
@@ -253,12 +280,8 @@ func Lookup(s config.Config, rootCAs *x509.CertPool) (l Config, err error) {
 		}
 	}
 
-	delay := getCfgVal(LoginFailureDelay)
-	if delay == "" {
-		delay = DefaultKVS.Get(LoginFailureDelay)
-	}
-	if l.loginFailureDelay, err = time.ParseDuration(delay); err != nil || l.loginFailureDelay < 0 {
-		return l, fmt.Errorf("invalid %s %q: expecting a duration of zero or more, e.g. \"1s\"", LoginFailureDelay, delay)
+	if err = l.lookupLoginLimits(getCfgVal); err != nil {
+		return l, err
 	}
 
 	// Lookup bind user configuration
@@ -346,4 +369,43 @@ func (l *Config) GetConfigInfo(s config.Config, cfgName string) ([]madmin.IDPCfg
 	})
 
 	return res, nil
+}
+
+// lookupLoginLimits reads the login failure delay and the login limits.
+// A key that resolves to nothing has its DefaultKVS value.
+func (l *Config) lookupLoginLimits(getCfgVal func(string) string) error {
+	value := func(key string) string {
+		if v := getCfgVal(key); v != "" {
+			return v
+		}
+		return DefaultKVS.Get(key)
+	}
+	duration := func(key string) (time.Duration, error) {
+		d, err := time.ParseDuration(value(key))
+		if err != nil || d < 0 {
+			return 0, fmt.Errorf("invalid %s %q: expecting a duration of zero or more, e.g. \"1s\"", key, value(key))
+		}
+		return d, nil
+	}
+
+	var limits LoginLimits
+	var err error
+	if l.loginFailureDelay, err = duration(LoginFailureDelay); err != nil {
+		return err
+	}
+	if limits.Backoff, err = duration(LoginBackoff); err != nil {
+		return err
+	}
+	if limits.Lockout, err = duration(LoginLockout); err != nil {
+		return err
+	}
+	if limits.BackoffFactor, err = strconv.ParseFloat(value(LoginBackoffFactor), 64); err != nil ||
+		limits.BackoffFactor < 1 || math.IsInf(limits.BackoffFactor, 0) {
+		return fmt.Errorf("invalid %s %q: expecting a number of 1 or more", LoginBackoffFactor, value(LoginBackoffFactor))
+	}
+	if limits.MaxFailures, err = strconv.Atoi(value(LoginMaxFailures)); err != nil || limits.MaxFailures < 0 {
+		return fmt.Errorf("invalid %s %q: expecting a whole number of 0 (no limits) or more", LoginMaxFailures, value(LoginMaxFailures))
+	}
+	l.limiter = newLoginLimiter(limits)
+	return nil
 }

@@ -247,22 +247,36 @@ func (e *LoginError) Is(target error) bool { return target == ErrLoginFailed }
 // Cause returns what actually failed.
 func (e *LoginError) Cause() error { return e.cause }
 
-// Ordinary reports whether the cause is an unknown user or a wrong
-// password, rather than something for an administrator to look at.
+// Ordinary reports whether the cause is an unknown user, a wrong password
+// or a login refused by the limits, rather than something for an
+// administrator to look at. The start of a lockout is not ordinary: it is
+// logged once.
 func (e *LoginError) Ordinary() bool {
+	if errors.Is(e.cause, errLockoutStarted) {
+		return false
+	}
 	return strings.Contains(e.cause.Error(), "User DN not found for") ||
-		ldap.IsErrorWithCode(e.cause, ldap.LDAPResultInvalidCredentials)
+		ldap.IsErrorWithCode(e.cause, ldap.LDAPResultInvalidCredentials) ||
+		errors.Is(e.cause, errLoginRefused)
 }
 
+var (
+	errLoginRefused   = errors.New("login refused by the login limits")
+	errLockoutStarted = errors.New("login locked out")
+)
+
 // Bind - binds to ldap, searches LDAP and returns the distinguished name of the
-// user and the list of groups.
+// user and the list of groups. clientAddr is the address of the client that
+// sent the password, for the login limits.
 //
 // A failed login returns a *LoginError, and takes at least the configured
 // login failure delay: an unknown user skips the password bind, and would
-// otherwise be answered sooner than a wrong password.
-func (l *Config) Bind(username, password string) (*xldap.DNSearchResult, []string, error) {
+// otherwise be answered sooner than a wrong password. A login refused by
+// the limits gets the same error, so that a lockout does not tell which
+// users exist either.
+func (l *Config) Bind(username, password, clientAddr string) (*xldap.DNSearchResult, []string, error) {
 	start := time.Now()
-	lookupResult, groups, err := l.bind(username, password)
+	lookupResult, groups, err := l.bind(username, password, clientAddr)
 	var loginErr *LoginError
 	if errors.As(err, &loginErr) {
 		time.Sleep(time.Until(start.Add(l.loginFailureDelay)))
@@ -270,7 +284,7 @@ func (l *Config) Bind(username, password string) (*xldap.DNSearchResult, []strin
 	return lookupResult, groups, err
 }
 
-func (l *Config) bind(username, password string) (*xldap.DNSearchResult, []string, error) {
+func (l *Config) bind(username, password, clientAddr string) (*xldap.DNSearchResult, []string, error) {
 	conn, err := l.LDAP.Connect()
 	if err != nil {
 		return nil, nil, err
@@ -288,11 +302,24 @@ func (l *Config) bind(username, password string) (*xldap.DNSearchResult, []strin
 		return nil, nil, &LoginError{fmt.Errorf("Unable to find user DN: %w", err)}
 	}
 
+	// Only a known account has a password to guess, so the limits count
+	// per account, after the lookup.
+	account := lookupResult.NormDN
+	if ok, wait := l.limiter.attempt(account, clientAddr); !ok {
+		return nil, nil, &LoginError{fmt.Errorf("%w: %s from %s, retry in %v", errLoginRefused, account, clientAddr, wait.Round(time.Second))}
+	}
+
 	// Authenticate the user credentials.
 	err = conn.Bind(lookupResult.ActualDN, password)
 	if err != nil {
-		return nil, nil, &LoginError{fmt.Errorf("LDAP auth failed for DN %s: %w", lookupResult.ActualDN, err)}
+		cause := fmt.Errorf("LDAP auth failed for DN %s: %w", lookupResult.ActualDN, err)
+		if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidCredentials) && l.limiter.failed(account, clientAddr) {
+			cause = fmt.Errorf("%w: %s from %s for %v after %d failures: %w", errLockoutStarted,
+				account, clientAddr, l.limiter.limits.Lockout, l.limiter.limits.MaxFailures, cause)
+		}
+		return nil, nil, &LoginError{cause}
 	}
+	l.limiter.succeeded(account, clientAddr)
 
 	// Bind to the lookup user account again to perform group search.
 	if err = l.LDAP.LookupBind(conn); err != nil {

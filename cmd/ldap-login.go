@@ -20,6 +20,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"net"
 
 	xldap "github.com/minio/minio/internal/config/identity/ldap"
 	"github.com/minio/minio/internal/logger"
@@ -35,4 +36,17 @@ func logLDAPLoginFailure(ctx context.Context, err error) {
 	if errors.As(err, &loginErr) && !loginErr.Ordinary() {
 		authNLogIf(ctx, loginErr.Cause(), logger.WarningKind)
 	}
+}
+
+// remoteHost returns the IP address of a connection peer, for the LDAP
+// login limits of the SFTP and FTP servers, which have no proxy in front.
+func remoteHost(addr net.Addr) string {
+	if addr == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		return addr.String()
+	}
+	return host
 }

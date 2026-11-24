@@ -47,6 +47,10 @@ MINIO_IDENTITY_LDAP_TLS_SKIP_VERIFY         (on|off)    trust server TLS without
 MINIO_IDENTITY_LDAP_SERVER_INSECURE         (on|off)    allow plain text connection to AD/LDAP server (default: 'off')
 MINIO_IDENTITY_LDAP_SERVER_STARTTLS         (on|off)    use StartTLS connection to AD/LDAP server (default: 'off')
 MINIO_IDENTITY_LDAP_LOGIN_FAILURE_DELAY     (duration)  least time a failed login takes, so that an unknown user and a wrong password cannot be told apart by timing; set it above the slowest normal LDAP lookup and bind (default: '1s')
+MINIO_IDENTITY_LDAP_LOGIN_BACKOFF           (duration)  wait after a failed login before the same account may try again from the same client address (default: '1s')
+MINIO_IDENTITY_LDAP_LOGIN_BACKOFF_FACTOR    (number)    factor the wait grows by after every further failure in a row; 1 keeps it at login_backoff (default: '2')
+MINIO_IDENTITY_LDAP_LOGIN_MAX_FAILURES      (number)    failed logins in a row that lock the account out for that client address; 0 turns the login limits off (default: '10')
+MINIO_IDENTITY_LDAP_LOGIN_LOCKOUT           (duration)  how long a lockout lasts; failures are also forgotten this long after the last wait ended (default: '15m')
 MINIO_IDENTITY_LDAP_COMMENT                 (sentence)  optionally add a comment to this setting
 ```
 
@@ -261,6 +265,15 @@ XML response for this API is similar to [AWS STS AssumeRoleWithWebIdentity](http
 ### Errors
 
 XML error response for this API is similar to [AWS STS AssumeRoleWithWebIdentity](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html#API_AssumeRoleWithWebIdentity_Errors)
+
+### Login limits
+
+Password guessing is limited per account and client address. After a failed login, the same account may try again from the same address only after `login_backoff`; the wait grows by `login_backoff_factor` with every further failure in a row (1 s, 2 s, 4 s … by default), and `login_max_failures` failures in a row lock the account out for that address for `login_lockout`. A success clears the count. A login refused by the limits gets the same answer as a wrong password, so a lockout does not tell which users exist either; the start of each lockout is written to the server log as a warning.
+
+- The client address is the connection peer, or, behind a proxy listed in `api trusted_proxies`, the address that proxy reports. IPv6 addresses count per /64. For SFTP and FTP it is the peer of the connection.
+- Only known accounts are counted; an unknown user has no password to guess.
+- Anyone who knows a user name can lock that user out for their own address only; other addresses are not affected.
+- The limits are kept in memory on each server: a restart or a change of the LDAP configuration forgets them, and each server of a cluster counts on its own.
 
 A failed login gets one answer, whatever the cause (an unknown user, a wrong password, a refused bind): `InvalidParameterValue` with the message `LDAP authentication failed: user not found or invalid password`, after at least `login_failure_delay`. The server does not tell which users exist. Causes other than an unknown user or a wrong password, such as an ambiguous user or a lost connection to the LDAP server, are written to the server log as warnings.
 

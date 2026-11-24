@@ -38,10 +38,12 @@ func TestLoginError(t *testing.T) {
 		err      *LoginError
 		ordinary bool
 	}{
-		"unknown user":   {notFound, true},
-		"wrong password": {wrongPassword, true},
-		"ambiguous user": {ambiguous, false},
-		"refused bind":   {refused, false},
+		"unknown user":    {notFound, true},
+		"wrong password":  {wrongPassword, true},
+		"ambiguous user":  {ambiguous, false},
+		"refused bind":    {refused, false},
+		"login limits":    {&LoginError{fmt.Errorf("%w: uid=dillon from 192.0.2.1, retry in 2s", errLoginRefused)}, true},
+		"lockout started": {&LoginError{fmt.Errorf("%w: uid=dillon from 192.0.2.1: %w", errLockoutStarted, wrongPassword.cause)}, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var err error = tc.err

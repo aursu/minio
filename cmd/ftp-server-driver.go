@@ -270,7 +270,7 @@ func (driver *ftpDriver) CheckPasswd(c *ftp.Context, username, password string) 
 			return false, err
 		}
 		if errors.Is(err, errNoSuchServiceAccount) {
-			lookupRes, groupDistNames, err := globalIAMSys.LDAPConfig.Bind(username, password)
+			lookupRes, groupDistNames, err := globalIAMSys.LDAPConfig.Bind(username, password, remoteHost(c.Sess.RemoteAddr()))
 			if err != nil {
 				logLDAPLoginFailure(context.Background(), err)
 				return false, err
