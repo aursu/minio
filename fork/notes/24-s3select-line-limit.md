@@ -21,8 +21,8 @@ code:
 
 - `json.PReader`, used on CPUs without AVX2/CLMUL;
 - `simdj.Reader`, used on all other CPUs, which includes media-gw and most
-  servers. the NDJSON stream parser of `simdjson-go` also completes its block with
-  an unbounded `ReadBytes`.
+  servers. The newline-delimited stream parser of `simdjson-go` also
+  completes its block with an unbounded `ReadBytes`.
 
 The advisory's only fix is in AIStor, which is closed source and not used
 here.
