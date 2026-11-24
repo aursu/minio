@@ -971,6 +971,7 @@ func TestIAMWithLDAPServerSuite(t *testing.T) {
 				suite.TestLDAPAttributesLookup(c)
 				suite.TestLDAPCyrillicUser(c)
 				suite.TestLDAPSlashDN(c)
+				suite.TestLDAPLoginFailure(c)
 				suite.TearDownSuite(c)
 			},
 		)
@@ -2237,6 +2238,48 @@ func (s *TestSuiteIAM) TestLDAPCyrillicUser(c *check) {
 
 	if _, err = s.adm.DetachPolicyLDAP(ctx, userReq); err != nil {
 		c.Fatalf("Unable to detach user policy: %v", err)
+	}
+}
+
+// A failed LDAP login gives one answer, and takes the same time, whatever
+// the cause, so that it does not tell which users exist (CVE-2026-33419).
+func (s *TestSuiteIAM) TestLDAPLoginFailure(c *check) {
+	const delay = time.Second // the default login_failure_delay
+	login := func(user, password string) (string, time.Duration) {
+		ldapID := cr.LDAPIdentity{
+			Client:       s.TestSuiteCommon.client,
+			STSEndpoint:  s.endPoint,
+			LDAPUsername: user,
+			LDAPPassword: password,
+		}
+		start := time.Now()
+		_, err := ldapID.Retrieve()
+		took := time.Since(start)
+		if err == nil {
+			c.Fatalf("login as %s succeeded", user)
+		}
+		return err.Error(), took
+	}
+
+	unknownMsg, unknownTook := login("nosuchuser", "dillon")
+	wrongMsg, wrongTook := login("dillon", "not-dillons-password")
+
+	if unknownMsg != wrongMsg {
+		c.Fatalf("unknown user and wrong password answer differently:\n%q\n%q", unknownMsg, wrongMsg)
+	}
+	if !strings.Contains(wrongMsg, "LDAP authentication failed: user not found or invalid password") {
+		c.Fatalf("unexpected message %q", wrongMsg)
+	}
+	if strings.Contains(wrongMsg, "uid=") || strings.Contains(wrongMsg, "dillon") {
+		c.Fatalf("message names the user: %q", wrongMsg)
+	}
+	for name, took := range map[string]time.Duration{"unknown user": unknownTook, "wrong password": wrongTook} {
+		if took < delay {
+			c.Fatalf("%s answered after %v, before login_failure_delay %v", name, took, delay)
+		}
+	}
+	if diff := (unknownTook - wrongTook).Abs(); diff > 300*time.Millisecond {
+		c.Fatalf("answer times differ by %v (unknown user %v, wrong password %v)", diff, unknownTook, wrongTook)
 	}
 }
 
