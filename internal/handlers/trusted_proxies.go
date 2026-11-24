@@ -114,6 +114,14 @@ func (t *TrustedProxies) trusts(addr netip.Addr) bool {
 	return false
 }
 
+// hop is one entry of a forwarding header: the address a proxy received
+// the request from and, for Forwarded only, the scheme it was received
+// with.
+type hop struct {
+	addr  string
+	proto string
+}
+
 // clientAddr returns the address of the client, given the address of the
 // connection peer (with or without a port) and the request headers. A peer
 // that is not an IP address is returned as is.
@@ -122,66 +130,129 @@ func (t *TrustedProxies) clientAddr(peer string, h http.Header) string {
 	if !ok {
 		return peer
 	}
-	if !t.trusts(addr) {
-		return addr.String()
+	if t.trusts(addr) {
+		addr, _ = t.walk(addr, h)
 	}
+	return addr.String()
+}
+
+// clientScheme returns the scheme the client used, "http" or "https", as a
+// trusted peer reports it, or "" when the peer is not trusted or reports
+// nothing valid.
+//
+// With Forwarded it is the proto parameter of the element the client
+// address was found in. That element was written by the proxy the client
+// connected to. Otherwise it is X-Forwarded-Proto, or X-Forwarded-Scheme,
+// as the nearest proxy set it: the last value, since an earlier one may
+// come from the client.
+func (t *TrustedProxies) clientScheme(peer string, h http.Header) string {
+	addr, ok := parseNode(peer)
+	if !ok || !t.trusts(addr) {
+		return ""
+	}
+	var proto string
+	if t.header == forwarded {
+		if _, client := t.walk(addr, h); client != nil {
+			proto = client.proto
+		}
+	} else {
+		proto = lastValue(h, xForwardedProto)
+		if proto == "" {
+			proto = lastValue(h, xForwardedScheme)
+		}
+	}
+	switch proto = strings.ToLower(proto); proto {
+	case "http", "https":
+		return proto
+	}
+	return ""
+}
+
+// walk follows the forwarding header of a request from the trusted peer,
+// from the right, past every trusted proxy. It returns the client address
+// and the hop it was found in, or nil when it is the peer itself.
+func (t *TrustedProxies) walk(peer netip.Addr, h http.Header) (netip.Addr, *hop) {
+	addr := peer
+	var client *hop
 	hops := forwardingHops(h, t.header)
 	for i := len(hops) - 1; i >= 0; i-- {
-		hop, ok := parseNode(hops[i])
+		next, ok := parseNode(hops[i].addr)
 		if !ok {
 			// Not an address ("unknown", a hostname, garbage): the
 			// trusted proxy that wrote it is the last address we know.
 			break
 		}
-		addr = hop
+		addr, client = next, &hops[i]
 		if !t.trusts(addr) {
 			break
 		}
 	}
-	return addr.String()
+	return addr, client
 }
 
-// forwardingHops returns the addresses listed in header, the client first
-// and the nearest proxy last. A header may be sent as several fields; they
-// are one list in the order received.
-func forwardingHops(h http.Header, header string) []string {
-	var hops []string
+// forwardingHops returns the entries of header, the client first and the
+// nearest proxy last. A header may be sent as several fields; they are one
+// list in the order received.
+func forwardingHops(h http.Header, header string) []hop {
+	var hops []hop
 	for _, field := range h.Values(header) {
 		switch header {
 		case xRealIP:
 			// One address, replaced rather than appended by each proxy.
-			hops = append(hops[:0], strings.TrimSpace(field))
+			hops = append(hops[:0], hop{addr: strings.TrimSpace(field)})
 		case forwarded:
 			for _, element := range splitUnquoted(field, ',') {
-				hops = append(hops, forwardedFor(element))
+				hops = append(hops, forwardedElement(element))
 			}
 		default:
-			for hop := range strings.SplitSeq(field, ",") {
-				hops = append(hops, strings.TrimSpace(hop))
+			for addr := range strings.SplitSeq(field, ",") {
+				hops = append(hops, hop{addr: strings.TrimSpace(addr)})
 			}
 		}
 	}
 	return hops
 }
 
-// forwardedFor returns the "for" parameter of one element of a Forwarded
-// header (RFC 7239, section 4), unquoted. An element without it, or with it
-// twice, yields "", which is not an address.
-func forwardedFor(element string) string {
-	var addr string
-	found := false
+// lastValue returns the last comma separated value of header.
+func lastValue(h http.Header, header string) string {
+	values := h.Values(header)
+	if len(values) == 0 {
+		return ""
+	}
+	last := values[len(values)-1]
+	return strings.TrimSpace(last[strings.LastIndexByte(last, ',')+1:])
+}
+
+// forwardedElement returns the "for" and "proto" parameters of one element
+// of a Forwarded header (RFC 7239, section 4), unquoted. A parameter that
+// is missing, or given twice, yields "": not an address, not a scheme.
+func forwardedElement(element string) hop {
+	var h hop
+	var seenFor, seenProto bool
 	for _, pair := range splitUnquoted(element, ';') {
 		name, value, ok := strings.Cut(pair, "=")
-		if !ok || !strings.EqualFold(strings.TrimSpace(name), "for") {
+		if !ok {
 			continue
 		}
-		if found {
-			return ""
+		value = unquote(strings.TrimSpace(value))
+		switch name = strings.TrimSpace(name); {
+		case strings.EqualFold(name, "for"):
+			h.addr = onlyOnce(&seenFor, value)
+		case strings.EqualFold(name, "proto"):
+			h.proto = onlyOnce(&seenProto, value)
 		}
-		found = true
-		addr = unquote(strings.TrimSpace(value))
 	}
-	return addr
+	return h
+}
+
+// onlyOnce returns value the first time and "" every later time, so that a
+// parameter given twice in one element counts as missing.
+func onlyOnce(seen *bool, value string) string {
+	if *seen {
+		return ""
+	}
+	*seen = true
+	return value
 }
 
 // splitUnquoted splits s at every sep that is not inside a quoted-string.
