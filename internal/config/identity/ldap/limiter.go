@@ -114,9 +114,11 @@ func (l *loginLimiter) attempt(account, addr string) (ok bool, wait time.Duratio
 		return false, st.next.Sub(now)
 	}
 	if st == nil {
+		// Sweep before the new state is in the map: until its wait is
+		// set below, it would look expired and be swept.
+		l.sweepLocked(now)
 		st = &loginState{}
 		l.state[k] = st
-		l.sweepLocked(now)
 	}
 	st.next = now.Add(l.waitAfter(st.failures + 1))
 	return true, 0
@@ -180,7 +182,8 @@ func (l *loginLimiter) expired(st *loginState, now time.Time) bool {
 }
 
 // sweepLocked drops expired states once the map has doubled since the
-// last sweep, so that memory follows the number of live states.
+// last sweep, so that memory follows the number of live states. It is
+// called before a new state is added.
 func (l *loginLimiter) sweepLocked(now time.Time) {
 	if len(l.state) < l.nextSweep {
 		return

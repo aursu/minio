@@ -196,18 +196,27 @@ func TestLoginLimiterDisabled(t *testing.T) {
 
 func TestLoginLimiterSweep(t *testing.T) {
 	l, c := testLimiter(defaultLimits)
-	for i := range minSweep - 1 {
+	for i := range minSweep {
 		fail(t, l, dn, fmt.Sprintf("10.0.%d.%d", i/256, i%256))
 	}
-	if l.nextSweep != minSweep || len(l.state) != minSweep-1 {
+	if l.nextSweep != minSweep || len(l.state) != minSweep {
 		t.Fatalf("%d states, next sweep at %d", len(l.state), l.nextSweep)
 	}
 	c.advance(time.Hour)
-	fail(t, l, dn, addr) // the state that reaches minSweep: every other one has expired
+	fail(t, l, dn, addr) // one more state, which sweeps: every other one has expired
 	if len(l.state) != 1 {
 		t.Fatalf("%d states after the sweep, want 1", len(l.state))
 	}
 	if l.nextSweep != minSweep {
 		t.Fatalf("next sweep at %d, want %d", l.nextSweep, minSweep)
 	}
+}
+
+// The attempt that triggers a sweep keeps its reservation: the new state
+// must not be swept as expired before its wait is set.
+func TestLoginLimiterSweepKeepsNewState(t *testing.T) {
+	l, _ := testLimiter(defaultLimits)
+	l.nextSweep = 1
+	wantWait(t, l, dn, addr, 0) // sweeps
+	wantWait(t, l, dn, addr, time.Second)
 }

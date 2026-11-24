@@ -143,6 +143,19 @@ about 600 a day, where it was unlimited before.
   The first run gave B the address A had just released, because Docker
   reuses a freed address. The clients now have fixed addresses.
 
+## Correction (2026-11-25): the sweep dropped the state it was adding
+
+Found while writing PR 6. `attempt` added a new state to the map and then
+called the sweep, before setting the state's wait. If that attempt
+triggered a sweep, the new state looked expired and was dropped, and its
+reservation was lost. `TestLoginLimiterSweep` still passed, because the
+following `failed` created the state again.
+
+The sweep now runs before the state is added. It is called with the size
+before the addition, so it fires one state later than before.
+`TestLoginLimiterSweepKeepsNewState` fails with the old order: "attempt:
+ok true, wait 0s; want refused, wait 1s".
+
 ## Not in this change
 
 - **One address against many accounts** (password spraying) is PR 6.
