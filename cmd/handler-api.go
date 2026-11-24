@@ -32,6 +32,7 @@ import (
 	"github.com/shirou/gopsutil/v3/mem"
 
 	"github.com/minio/minio/internal/config/api"
+	"github.com/minio/minio/internal/handlers"
 	xioutil "github.com/minio/minio/internal/ioutil"
 	"github.com/minio/minio/internal/logger"
 	"github.com/minio/minio/internal/mcontext"
@@ -187,6 +188,7 @@ func (t *apiConfig) init(cfg api.Config, setDriveCounts []int, legacy bool) {
 	t.rootAccess = cfg.RootAccess
 	t.syncEvents = cfg.SyncEvents
 	t.objectMaxVersions = cfg.ObjectMaxVersions
+	handlers.SetTrustedProxies(cfg.TrustedProxies)
 
 	if t.staleUploadsCleanupInterval != cfg.StaleUploadsCleanupInterval {
 		t.staleUploadsCleanupInterval = cfg.StaleUploadsCleanupInterval
