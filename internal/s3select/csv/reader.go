@@ -28,6 +28,7 @@ import (
 
 	csv "github.com/minio/csvparser"
 	"github.com/minio/minio/internal/bpool"
+	"github.com/minio/minio/internal/s3select/linelimit"
 	"github.com/minio/minio/internal/s3select/sql"
 )
 
@@ -139,47 +140,14 @@ func (r *Reader) nextSplit(skip int, dst []byte) ([]byte, error) {
 			return dst, io.EOF
 		}
 	}
-	// Blocks always end on a line boundary, so the line we are completing
-	// starts after the last newline inside the skipped bytes.
-	lineLen := len(dst) - (bytes.LastIndexByte(dst, '\n') + 1)
-
-	// Read until next line, but never buffer more than csvMaxLineSize bytes
-	// for a single line (CVE-2026-39414): an input without newlines would
-	// otherwise be read into one allocation until EOF.
-	for {
-		in, err := r.buf.ReadSlice('\n')
-		dst = append(dst, in...)
-		lineLen += len(in)
-		switch err {
-		case bufio.ErrBufferFull:
-			if lineLen > csvMaxLineSize {
-				return nil, errOverMaxRecordSize()
-			}
-			continue
-		case nil:
-			lineLen-- // the newline itself is not part of the line
-		}
-		if lineLen > csvMaxLineSize {
-			return nil, errOverMaxRecordSize()
-		}
-		return dst, err
-	}
+	// Complete the line the block ends in, within the S3 Select record limit.
+	return linelimit.CompleteLine(r.buf, dst)
 }
 
 // csvSplitSize is the size of each block.
 // Blocks will read this much and find the first following newline.
 // 128KB appears to be a very reasonable default.
 const csvSplitSize = 128 << 10
-
-// csvMaxLineSize is the maximum length in bytes of a single input line,
-// excluding its newline, after RecordDelimiter has been normalized to '\n'.
-// It matches the S3 Select maxCharsPerRecord limit of 1 MB that is also
-// enforced on output records (see OverMaxRecordSize in package s3select).
-// The upstream advisory GHSA-h749-fxx7-pwpg fixes the same bug with a
-// 128 KiB cap; 1 MiB is used here so lines that the S3 contract accepts keep
-// working, while memory per split stays bounded to
-// csvSplitSize + csvMaxLineSize + one bufio buffer.
-const csvMaxLineSize = 1 << 20
 
 // startReaders will read the header if needed and spin up a parser
 // and a number of workers based on GOMAXPROCS.

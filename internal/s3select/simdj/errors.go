@@ -17,10 +17,7 @@
 
 package simdj
 
-import (
-	"errors"
-	"fmt"
-)
+import "fmt"
 
 type s3Error struct {
 	code       string
@@ -47,15 +44,6 @@ func (err *s3Error) HTTPStatusCode() int {
 
 func (err *s3Error) Error() string {
 	return err.message
-}
-
-func errOverMaxRecordSize() *s3Error {
-	return &s3Error{
-		code:       "OverMaxRecordSize",
-		message:    "The length of a record in the input or result is greater than maxCharsPerRecord of 1 MB.",
-		statusCode: 400,
-		cause:      errors.New("json line exceeds maximum record size"),
-	}
 }
 
 func errJSONParsingError(err error) *s3Error {

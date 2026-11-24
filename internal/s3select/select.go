@@ -658,7 +658,26 @@ OuterLoop:
 	}
 
 	if err != nil {
-		_ = writer.FinishWithError("InternalError", err.Error())
+		// Send the records evaluated before the error first, as the reader
+		// returned them. sendRecord overwrites err, so keep the error. It
+		// can fail in three ways:
+		//   - an output record over the size limit: it reports that error
+		//     itself, which makes the call below a no-op;
+		//   - the writer is done: the client is gone;
+		//   - a marshal error: that error is dropped, and the client gets
+		//     the original error below instead.
+		selectErr := err
+		if len(outputQueue) > 0 {
+			sendRecord()
+		}
+		// An S3 Select error keeps its own code (OverMaxRecordSize,
+		// CSVParsingError, ...); anything else is an internal error.
+		code, message := "InternalError", selectErr.Error()
+		var serr SelectError
+		if errors.As(selectErr, &serr) {
+			code, message = serr.ErrorCode(), serr.ErrorMessage()
+		}
+		_ = writer.FinishWithError(code, message)
 	}
 }
 
