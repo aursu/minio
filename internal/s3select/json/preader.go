@@ -206,7 +206,12 @@ func (r *PReader) startReaders() {
 				//nolint:staticcheck // SA6002 Using pointer would allocate more since we would have to copy slice header before taking a pointer.
 				r.bufferPool.Put(in.input)
 				in.input = nil
-				in.err = d.Err()
+				// Keep the splitter's error (a read error, io.EOF) unless parsing
+				// failed: overwriting it with nil would end the stream early
+				// as if it were complete.
+				if err := d.Err(); err != nil {
+					in.err = errJSONParsingError(err)
+				}
 				in.dst <- all
 			}
 		}()
