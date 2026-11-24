@@ -26,7 +26,7 @@ import (
 )
 
 // newlineFreeGzip returns a GZIP object that decompresses into size bytes
-// without a newline. size is kept small enough that the behaviour before the
+// without a newline. size is kept small enough that the behavior before the
 // fix (buffering it whole) stays testable.
 func newlineFreeGzip(t *testing.T, size int) []byte {
 	t.Helper()
