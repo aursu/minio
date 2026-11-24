@@ -33,6 +33,7 @@ import (
 	"github.com/minio/madmin-go/v3"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/minio/minio/internal/handlers"
 	xioutil "github.com/minio/minio/internal/ioutil"
 	"github.com/minio/pkg/v3/mimedb"
 	"github.com/pkg/sftp"
@@ -105,13 +106,15 @@ func NewSFTPDriver(perms *ssh.Permissions, remoteIP string) sftp.Handlers {
 	}
 }
 
+// forwardForTransport passes the address of the SFTP or FTP client to the
+// S3 API, which trusts loopback as a proxy by default.
 type forwardForTransport struct {
 	tr  http.RoundTripper
 	fwd string
 }
 
 func (f forwardForTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	r.Header.Set("X-Forwarded-For", f.fwd)
+	handlers.SetForwardingHeaders(r.Header, f.fwd)
 	return f.tr.RoundTrip(r)
 }
 
@@ -121,7 +124,7 @@ func (f *sftpDriver) getMinIOClient() (*minio.Client, error) {
 		f.permissions.CriticalOptions["SecretKey"],
 		f.permissions.CriticalOptions["SessionToken"],
 	)
-	// Set X-Forwarded-For on all requests.
+	// Pass the client address on all requests.
 	tr := http.RoundTripper(globalRemoteFTPClientTransport)
 	if f.remoteIP != "" {
 		tr = forwardForTransport{tr: tr, fwd: f.remoteIP}
