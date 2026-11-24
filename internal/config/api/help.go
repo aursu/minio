@@ -124,7 +124,7 @@ var (
 		},
 		config.HelpKV{
 			Key:         apiTrustedProxyHeader,
-			Description: `set the header the trusted proxies write the client address to, "x-forwarded-for" or "x-real-ip"` + defaultHelpPostfix(apiTrustedProxyHeader),
+			Description: `set the header the trusted proxies write the client address to, "x-forwarded-for", "x-real-ip" or "forwarded" (RFC 7239)` + defaultHelpPostfix(apiTrustedProxyHeader),
 			Optional:    true,
 			Type:        "string",
 		},

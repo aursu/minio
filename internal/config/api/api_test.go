@@ -122,7 +122,7 @@ func TestLookupConfigTrustedProxies(t *testing.T) {
 	t.Run("invalid values fail and trust no proxy", func(t *testing.T) {
 		for k, v := range map[string]string{
 			apiTrustedProxies:     "proxy.example.com",
-			apiTrustedProxyHeader: "forwarded",
+			apiTrustedProxyHeader: "x-client-ip",
 		} {
 			cfg, err := LookupConfig(apiKVS(map[string]string{k: v}))
 			if err == nil {
