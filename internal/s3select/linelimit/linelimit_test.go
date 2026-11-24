@@ -227,3 +227,47 @@ func TestReaderNoNewlineBounded(t *testing.T) {
 		t.Fatalf("error not sticky: n=%d err=%v consumed %d -> %d", n, err, consumed, src.n)
 	}
 }
+
+// benchInput is 64 MiB of 100-byte lines, a typical CSV or JSON Lines shape.
+func benchInput() []byte {
+	return bytes.Repeat([]byte(strings.Repeat("x", 99)+"\n"), 64<<20/100)
+}
+
+// BenchmarkReader measures the cost of the line scan that the simdjson path
+// adds in front of the parser.
+func BenchmarkReader(b *testing.B) {
+	in := benchInput()
+	buf := make([]byte, 32<<10)
+	b.SetBytes(int64(len(in)))
+	b.ResetTimer()
+	for range b.N {
+		r := NewReader(bytes.NewReader(in))
+		for {
+			if _, err := r.Read(buf); err != nil {
+				break
+			}
+		}
+	}
+}
+
+// BenchmarkCompleteLine measures splitting into blocks as the CSV and JSON
+// Lines readers do.
+func BenchmarkCompleteLine(b *testing.B) {
+	in := benchInput()
+	dst := make([]byte, 0, splitSize+MaxLineSize)
+	b.SetBytes(int64(len(in)))
+	b.ResetTimer()
+	for range b.N {
+		buf := bufio.NewReaderSize(bytes.NewReader(in), bufSize)
+		for {
+			d := dst[:splitSize]
+			n, err := io.ReadFull(buf, d)
+			if err != nil {
+				break
+			}
+			if _, err := CompleteLine(buf, d[:n]); err != nil {
+				break
+			}
+		}
+	}
+}
