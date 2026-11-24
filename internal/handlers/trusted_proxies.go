@@ -230,11 +230,16 @@ func unquote(s string) string {
 func SetForwardingHeaders(h http.Header, addr string) {
 	h.Set(xForwardedFor, addr)
 	h.Set(xRealIP, addr)
+	h.Set(forwarded, forwardedForParam(addr))
+}
+
+// forwardedForParam returns the "for" parameter of a Forwarded element for
+// an IP address; IPv6 is bracketed and quoted (RFC 7239, section 6).
+func forwardedForParam(addr string) string {
 	if strings.ContainsRune(addr, ':') {
-		h.Set(forwarded, `for="[`+addr+`]"`)
-	} else {
-		h.Set(forwarded, "for="+addr)
+		return `for="[` + addr + `]"`
 	}
+	return "for=" + addr
 }
 
 // parseNode parses an address as proxies write it: an IP address, with an

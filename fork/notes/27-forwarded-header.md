@@ -31,6 +31,15 @@ Alexander asked for the standard header next to the de-facto ones.
    SFTP and FTP users, and the audit log lost their address. The live
    check below shows it on the #51 image.
 
+3. **`fix(handlers)`: the forwarder appends a `Forwarded` element.**
+   Requests forwarded to a federated deployment or a site replication
+   peer went out with the client's own `Forwarded` header untouched. A
+   receiving deployment that trusts the forwarder with `forwarded` would
+   take the client's last element as the client. The forwarder now adds
+   `for=<peer>;proto=<scheme it received>`, as RFC 7239 asks of a proxy.
+   The test resolves the forwarded request on the receiving side.
+   Found while writing PR 3.
+
 ## A defect of #51 found here
 
 The live SFTP check showed that `MINIO_API_TRUSTED_PROXIES=` did not
