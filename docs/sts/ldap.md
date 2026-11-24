@@ -46,6 +46,7 @@ MINIO_IDENTITY_LDAP_GROUP_SEARCH_BASE_DN    (list)      ";" separated list of gr
 MINIO_IDENTITY_LDAP_TLS_SKIP_VERIFY         (on|off)    trust server TLS without verification (default: 'off')
 MINIO_IDENTITY_LDAP_SERVER_INSECURE         (on|off)    allow plain text connection to AD/LDAP server (default: 'off')
 MINIO_IDENTITY_LDAP_SERVER_STARTTLS         (on|off)    use StartTLS connection to AD/LDAP server (default: 'off')
+MINIO_IDENTITY_LDAP_LOGIN_FAILURE_DELAY     (duration)  least time a failed login takes, so that an unknown user and a wrong password cannot be told apart by timing; set it above the slowest normal LDAP lookup and bind (default: '1s')
 MINIO_IDENTITY_LDAP_COMMENT                 (sentence)  optionally add a comment to this setting
 ```
 
@@ -260,6 +261,8 @@ XML response for this API is similar to [AWS STS AssumeRoleWithWebIdentity](http
 ### Errors
 
 XML error response for this API is similar to [AWS STS AssumeRoleWithWebIdentity](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html#API_AssumeRoleWithWebIdentity_Errors)
+
+A failed login gets one answer, whatever the cause (an unknown user, a wrong password, a refused bind): `InvalidParameterValue` with the message `LDAP authentication failed: user not found or invalid password`, after at least `login_failure_delay`. The server does not tell which users exist. Causes other than an unknown user or a wrong password, such as an ambiguous user or a lost connection to the LDAP server, are written to the server log as warnings.
 
 ## Sample `POST` Request
 

@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"net"
 	"sort"
 	"time"
@@ -43,6 +44,9 @@ type Config struct {
 	LDAP ldap.Config
 
 	stsExpiryDuration time.Duration // contains converted value
+
+	// loginFailureDelay is the least time a failed login takes.
+	loginFailureDelay time.Duration
 }
 
 // Enabled returns if LDAP is enabled.
@@ -58,6 +62,7 @@ func (l *Config) Clone() Config {
 	cfg := Config{
 		LDAP:              l.LDAP.Clone(),
 		stsExpiryDuration: l.stsExpiryDuration,
+		loginFailureDelay: l.loginFailureDelay,
 	}
 	return cfg
 }
@@ -76,6 +81,7 @@ const (
 	TLSSkipVerify      = "tls_skip_verify"
 	ServerInsecure     = "server_insecure"
 	ServerStartTLS     = "server_starttls"
+	LoginFailureDelay  = "login_failure_delay"
 
 	EnvServerAddr         = "MINIO_IDENTITY_LDAP_SERVER_ADDR"
 	EnvSRVRecordName      = "MINIO_IDENTITY_LDAP_SRV_RECORD_NAME"
@@ -154,6 +160,10 @@ var (
 		config.KV{
 			Key:   LookupBindPassword,
 			Value: "",
+		},
+		config.KV{
+			Key:   LoginFailureDelay,
+			Value: "1s",
 		},
 	}
 )
@@ -241,6 +251,14 @@ func Lookup(s config.Config, rootCAs *x509.CertPool) (l Config, err error) {
 		if err != nil {
 			return l, err
 		}
+	}
+
+	delay := getCfgVal(LoginFailureDelay)
+	if delay == "" {
+		delay = DefaultKVS.Get(LoginFailureDelay)
+	}
+	if l.loginFailureDelay, err = time.ParseDuration(delay); err != nil || l.loginFailureDelay < 0 {
+		return l, fmt.Errorf("invalid %s %q: expecting a duration of zero or more, e.g. \"1s\"", LoginFailureDelay, delay)
 	}
 
 	// Lookup bind user configuration

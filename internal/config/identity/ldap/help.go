@@ -103,6 +103,12 @@ var (
 			Type:        "on|off",
 		},
 		config.HelpKV{
+			Key:         LoginFailureDelay,
+			Description: `least time a failed login takes, so that an unknown user and a wrong password cannot be told apart by timing; set it above the slowest normal LDAP lookup and bind` + defaultHelpPostfix(LoginFailureDelay),
+			Optional:    true,
+			Type:        "duration",
+		},
+		config.HelpKV{
 			Key:         config.Comment,
 			Description: config.DefaultComment,
 			Optional:    true,

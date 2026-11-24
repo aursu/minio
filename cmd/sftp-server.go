@@ -220,6 +220,7 @@ func processLDAPAuthentication(key ssh.PublicKey, pass []byte, user string) (per
 
 		lookupResult, targetGroups, err = globalIAMSys.LDAPConfig.Bind(user, string(pass))
 		if err != nil {
+			logLDAPLoginFailure(context.Background(), err)
 			return nil, err
 		}
 	} else if key != nil {
