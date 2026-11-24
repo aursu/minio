@@ -133,6 +133,18 @@ var (
 			Type:        "duration",
 		},
 		config.HelpKV{
+			Key:         LoginMaxAccountsPerAddress,
+			Description: `different accounts that may fail from one client address within login_address_lockout before the address is locked out for every account; 0 turns this limit off` + defaultHelpPostfix(LoginMaxAccountsPerAddress),
+			Optional:    true,
+			Type:        "number",
+		},
+		config.HelpKV{
+			Key:         LoginAddressLockout,
+			Description: `how long an address lockout lasts, and how long a failed account counts against its address` + defaultHelpPostfix(LoginAddressLockout),
+			Optional:    true,
+			Type:        "duration",
+		},
+		config.HelpKV{
 			Key:         config.Comment,
 			Description: config.DefaultComment,
 			Optional:    true,

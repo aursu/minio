@@ -313,9 +313,10 @@ func (l *Config) bind(username, password, clientAddr string) (*xldap.DNSearchRes
 	err = conn.Bind(lookupResult.ActualDN, password)
 	if err != nil {
 		cause := fmt.Errorf("LDAP auth failed for DN %s: %w", lookupResult.ActualDN, err)
-		if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidCredentials) && l.limiter.failed(account, clientAddr) {
-			cause = fmt.Errorf("%w: %s from %s for %v after %d failures: %w", errLockoutStarted,
-				account, clientAddr, l.limiter.limits.Lockout, l.limiter.limits.MaxFailures, cause)
+		if ldap.IsErrorWithCode(err, ldap.LDAPResultInvalidCredentials) {
+			if lockout := l.limiter.failed(account, clientAddr); lockout != "" {
+				cause = fmt.Errorf("%w: %s: %w", errLockoutStarted, lockout, cause)
+			}
 		}
 		return nil, nil, &LoginError{cause}
 	}
