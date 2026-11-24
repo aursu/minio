@@ -34,6 +34,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -2349,11 +2350,31 @@ func (api objectAPIHandlers) PutObjectExtractHandler(w http.ResponseWriter, r *h
 		sc = storageclass.STANDARD
 	}
 
+	// untar calls putObjectTar from parallel goroutines (small entries), and
+	// may return before they finish. isPutActionAllowed rewrites r.Form and
+	// the request's log info, so the per-entry checks take turns under
+	// entryMu; it also guards the first failures, which the handler turns
+	// into the one error response. Entries never write to w.
+	var (
+		entryMu     sync.Mutex
+		entryDenied APIErrorCode // first failed permission check
+		entryLocked APIErrorCode // first object-lock refusal
+	)
+	entryAllowed := func(object string, action policy.Action) APIErrorCode {
+		entryMu.Lock()
+		defer entryMu.Unlock()
+		errCode := isPutActionAllowed(ctx, rAuthType, bucket, object, r, action)
+		if errCode != ErrNone && entryDenied == ErrNone {
+			entryDenied = errCode
+		}
+		return errCode
+	}
+	reqVersionID := r.Form.Get(xhttp.VersionID)
+
 	putObjectTar := func(reader io.Reader, info os.FileInfo, object string) error {
 		size := info.Size()
-		if s3Err = isPutActionAllowed(ctx, getRequestAuthType(r), bucket, object, r, policy.PutObjectAction); s3Err != ErrNone {
-			writeErrorResponse(ctx, w, errorCodes.ToAPIErr(s3Err), r.URL)
-			return errors.New(errorCodes.ToAPIErr(s3Err).Code)
+		if errCode := entryAllowed(object, policy.PutObjectAction); errCode != ErrNone {
+			return errors.New(errorCodes.ToAPIErr(errCode).Code)
 		}
 		metadata := map[string]string{
 			xhttp.AmzStorageClass: sc, // save same storage-class as incoming stream.
@@ -2389,8 +2410,8 @@ func (api objectAPIHandlers) PutObjectExtractHandler(w http.ResponseWriter, r *h
 		pReader := NewPutObjReader(rawReader)
 
 		if r.Header.Get(xhttp.AmzBucketReplicationStatus) == replication.Replica.String() {
-			if s3Err = isPutActionAllowed(ctx, getRequestAuthType(r), bucket, object, r, policy.ReplicateObjectAction); s3Err != ErrNone {
-				return errors.New(errorCodes.ToAPIErr(s3Err).Code)
+			if errCode := entryAllowed(object, policy.ReplicateObjectAction); errCode != ErrNone {
+				return errors.New(errorCodes.ToAPIErr(errCode).Code)
 			}
 			metadata[ReservedMetadataPrefixLower+ReplicaStatus] = replication.Replica.String()
 			metadata[ReservedMetadataPrefixLower+ReplicaTimestamp] = UTCNow().Format(time.RFC3339Nano)
@@ -2419,7 +2440,7 @@ func (api objectAPIHandlers) PutObjectExtractHandler(w http.ResponseWriter, r *h
 			}
 			maps.Copy(metadata, m)
 		} else {
-			versionID = r.Form.Get(xhttp.VersionID)
+			versionID = reqVersionID
 			hdrs = r.Header
 		}
 
@@ -2445,7 +2466,11 @@ func (api objectAPIHandlers) PutObjectExtractHandler(w http.ResponseWriter, r *h
 		}
 
 		if s3err != ErrNone {
-			s3Err = s3err
+			entryMu.Lock()
+			if entryLocked == ErrNone {
+				entryLocked = s3err
+			}
+			entryMu.Unlock()
 			return ObjectLocked{}
 		}
 
@@ -2534,10 +2559,18 @@ func (api objectAPIHandlers) PutObjectExtractHandler(w http.ResponseWriter, r *h
 		return nil
 	}
 
-	if err = untar(ctx, hreader, putObjectTar, opts); err != nil {
-		apiErr := errorCodes.ToAPIErr(s3Err)
+	err = untar(ctx, hreader, putObjectTar, opts)
+	entryMu.Lock()
+	denied, locked := entryDenied, entryLocked
+	entryMu.Unlock()
+	if err != nil {
+		entryErr := denied
+		if entryErr == ErrNone {
+			entryErr = locked
+		}
+		apiErr := errorCodes.ToAPIErr(entryErr)
 		// If not set, convert or use BadRequest
-		if s3Err == ErrNone {
+		if entryErr == ErrNone {
 			apiErr = toAPIError(ctx, err)
 			if apiErr.Code == "InternalError" {
 				// Convert generic internal errors to bad requests.
@@ -2549,6 +2582,12 @@ func (api objectAPIHandlers) PutObjectExtractHandler(w http.ResponseWriter, r *h
 			}
 		}
 		writeErrorResponse(ctx, w, apiErr, r.URL)
+		return
+	}
+	if denied != ErrNone {
+		// With ignore-errors, untar skips a denied entry and goes on; the
+		// request is still refused, as when the entry wrote the response.
+		writeErrorResponse(ctx, w, errorCodes.ToAPIErr(denied), r.URL)
 		return
 	}
 
