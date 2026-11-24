@@ -179,23 +179,23 @@ func (rw *headerRewriter) Rewrite(req *http.Request) {
 	// appends the peer to X-Forwarded-For itself. X-Real-IP is set to the
 	// client as resolved here, never passed on from the client. Forwarded
 	// gets an element for this hop (RFC 7239, section 4).
+	received := "http"
+	if req.TLS != nil {
+		received = "https"
+	}
 	req.Header.Set(xRealIP, GetSourceIPRaw(req))
 	if peer, ok := parseNode(req.RemoteAddr); ok {
-		scheme := "http"
-		if req.TLS != nil {
-			scheme = "https"
-		}
-		req.Header.Add(forwarded, forwardedForParam(peer.String())+";proto="+scheme)
+		req.Header.Add(forwarded, forwardedForParam(peer.String())+";proto="+received)
 	}
 
-	xfProto := req.Header.Get(xForwardedProto)
-	if xfProto == "" {
-		if req.TLS != nil {
-			req.Header.Set(xForwardedProto, "https")
-		} else {
-			req.Header.Set(xForwardedProto, "http")
-		}
+	// X-Forwarded-Proto is the scheme the client used: as a trusted proxy
+	// in front of this deployment reported it, or as received here. It is
+	// never passed on from the client.
+	clientScheme := GetSourceScheme(req)
+	if clientScheme == "" {
+		clientScheme = received
 	}
+	req.Header.Set(xForwardedProto, clientScheme)
 
 	if xfPort := req.Header.Get(xForwardedPort); xfPort == "" {
 		req.Header.Set(xForwardedPort, forwardedPort(req))
