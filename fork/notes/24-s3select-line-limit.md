@@ -101,3 +101,5 @@ Behaviour after the change:
   and the error message (`3598c4305dfd`). It is outside the advisory and
   can be a separate change: pgsty `3252d5b7f349`'s `select.go` hunk with
   `3598c4305dfd`.
+
+  **Done in note 25 (#50).**
