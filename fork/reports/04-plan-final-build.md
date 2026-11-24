@@ -294,6 +294,8 @@ anything touching IAM, STS, OIDC, LDAP, console, HTTP or dependencies.
       `RELEASE.<time>.aursu.N` → build, version check, SSO smoke test,
       push of the checked image as `:<tag>` and `:latest`.
     - The release report is written per release in `fork/reports/`.
+    **Done 2026-11-24**: `RELEASE.2026-11-24T06-24-34Z.aursu.1` on `37fa04ea4`
+    (after phase 4 items 1–2), image public in ghcr, report 06.
 
 The decisions for both steps are under "Decisions taken (2026-11-23)".
 
