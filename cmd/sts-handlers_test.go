@@ -975,6 +975,7 @@ func TestIAMWithLDAPServerSuite(t *testing.T) {
 				suite.TestLDAPSlashDN(c)
 				suite.TestLDAPLoginFailure(c)
 				suite.TestLDAPLoginLimits(c)
+				suite.TestLDAPLoginAddressLimit(c)
 				suite.TearDownSuite(c)
 			},
 		)
@@ -2337,6 +2338,36 @@ func (s *TestSuiteIAM) TestLDAPLoginLimits(c *check) {
 	}
 	if body := s.ldapLoginFrom(c, attacker, "dillon", "dillon"); !strings.Contains(body, failed) {
 		c.Fatalf("right password during the lockout was not refused alike: %s", body)
+	}
+	if body := s.ldapLoginFrom(c, other, "dillon", "dillon"); strings.Contains(body, failed) {
+		c.Fatalf("right password from another address was refused: %s", body)
+	}
+}
+
+// Failures on login_max_accounts_per_address different accounts lock the
+// address out for every account, with the answer of a wrong password;
+// another address is not affected.
+func (s *TestSuiteIAM) TestLDAPLoginAddressLimit(c *check) {
+	ctx, cancel := context.WithTimeout(context.Background(), testDefaultTimeout)
+	defer cancel()
+	setLimits := func(kvs string) {
+		if _, err := s.adm.SetConfigKV(ctx, "identity_ldap "+kvs); err != nil {
+			c.Fatalf("unable to set the login limits: %v", err)
+		}
+		s.RestartIAMSuite(c)
+	}
+	setLimits("login_failure_delay=0s login_backoff=0s login_max_accounts_per_address=2 login_address_lockout=1h")
+	defer setLimits("login_failure_delay=1s login_backoff=1s login_max_accounts_per_address=10 login_address_lockout=15m")
+
+	const failed = "LDAP authentication failed: user not found or invalid password"
+	const sprayer, other = "203.0.113.20", "203.0.113.21"
+	for _, user := range []string{"dillon", "svc.algorithm"} {
+		if body := s.ldapLoginFrom(c, sprayer, user, "Summer2026!"); !strings.Contains(body, failed) {
+			c.Fatalf("wrong password for %s: %s", user, body)
+		}
+	}
+	if body := s.ldapLoginFrom(c, sprayer, "dillon", "dillon"); !strings.Contains(body, failed) {
+		c.Fatalf("right password from the locked-out address was not refused alike: %s", body)
 	}
 	if body := s.ldapLoginFrom(c, other, "dillon", "dillon"); strings.Contains(body, failed) {
 		c.Fatalf("right password from another address was refused: %s", body)
