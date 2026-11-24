@@ -28,7 +28,7 @@ than #49:
   as if the object were complete. One such error is a GZIP checksum
   mismatch.
 
-## What (PR #50, five commits)
+## What (PR #50)
 
 1. **`refactor(s3select)`** (ours). New package
    `internal/s3select/linelimit`:
@@ -61,10 +61,17 @@ than #49:
    - `Evaluate` sends the queued records first, then the error. An S3
      Select error keeps its own code and message; anything else stays
      `InternalError`.
-   - If sending the queued records fails, the error is still reported.
-     pgsty stops at that point instead, which loses the error after a
-     marshal failure. Reporting twice is harmless: `FinishWithError` on
-     a finished writer is a no-op.
+   - If sending the queued records fails, the original error is still
+     reported. Sending can fail in three ways:
+     - an output record over the limit, which `sendRecord` reports
+       itself; the second report is a no-op, because `FinishWithError`
+       on a finished writer does nothing;
+     - a closed writer, which means the client is gone;
+     - a marshal error. That error is dropped, and the client gets the
+       original error instead.
+
+     pgsty stops at that point instead, so after a marshal failure the
+     client gets no error at all.
    - `json.PReader` keeps the splitter's error unless parsing failed, and
      reports a parse failure as `JSONParsingError`, as simdj and the CSV
      reader already do.
@@ -72,6 +79,28 @@ than #49:
      Lines, is not taken.
 5. **`test(s3select/linelimit)`**: throughput benchmarks for `Reader` and
    `CompleteLine`.
+
+## Client-visible change (for the release notes)
+
+This is not a pure refactor. Commits 2 and 4 change what S3 Select clients
+see, and the release notes of the next release must say so.
+
+- **Error codes.** Errors in the middle of a Select stream used to
+  arrive as `InternalError`. They now carry their own S3 code:
+  `OverMaxRecordSize` for an input line over 1 MiB (CVE-2026-39414),
+  and `JSONParsingError` for invalid JSON Lines. Errors that are not S3
+  Select errors stay `InternalError`, for example a failed `CAST`.
+- **Records before an error.** Records produced before an error are now
+  delivered before the error event. Up to 99 come from the output queue
+  of `Evaluate` (commit 4), and one from the queue of the message writer
+  (commit 2).
+- **Corrupt compressed JSON Lines input.** A read error on the last
+  block, such as a GZIP checksum mismatch, now fails the query. Before,
+  the result was returned as complete.
+
+The refactor (commit 1) does not change behaviour. PRs are merged without
+squash, so each of commits 2 and 4 can be reverted alone. Commit 4 holds
+the error codes, the queued records and the PReader fix together.
 
 ## Tests (media-gw, golang:1.27.4, `-tags kqueue,dev`)
 

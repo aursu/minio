@@ -659,9 +659,13 @@ OuterLoop:
 
 	if err != nil {
 		// Send the records evaluated before the error first, as the reader
-		// returned them. sendRecord sets err, so keep the error. If it fails,
-		// it has either reported the failure itself, which makes the call
-		// below a no-op, or the client is gone.
+		// returned them. sendRecord overwrites err, so keep the error. It
+		// can fail in three ways:
+		//   - an output record over the size limit: it reports that error
+		//     itself, which makes the call below a no-op;
+		//   - the writer is done: the client is gone;
+		//   - a marshal error: that error is dropped, and the client gets
+		//     the original error below instead.
 		selectErr := err
 		if len(outputQueue) > 0 {
 			sendRecord()
