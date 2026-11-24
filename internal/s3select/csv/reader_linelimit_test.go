@@ -18,56 +18,17 @@
 package csv
 
 import (
-	"bufio"
-	"errors"
 	"io"
 	"strings"
 	"testing"
 
+	"github.com/minio/minio/internal/s3select/linelimit"
 	"github.com/minio/minio/internal/s3select/sql"
 )
 
-// testMaxLineSize pins the documented per-line input limit (S3 Select
-// maxCharsPerRecord, 1 MiB). It intentionally does not reference the
-// production constant so that the contract cannot silently drift.
-const testMaxLineSize = 1 << 20
-
-const overMaxRecordSizeCode = "OverMaxRecordSize"
-
-// countingByteReader yields `limit` copies of b without any newline and
-// records how many bytes were handed out, so tests can prove that the reader
-// stops consuming input once the line limit is exceeded.
-type countingByteReader struct {
-	b     byte
-	n     int64
-	limit int64
-}
-
-func (c *countingByteReader) Read(p []byte) (int, error) {
-	if c.n >= c.limit {
-		return 0, io.EOF
-	}
-	if rem := c.limit - c.n; int64(len(p)) > rem {
-		p = p[:rem]
-	}
-	for i := range p {
-		p[i] = c.b
-	}
-	c.n += int64(len(p))
-	return len(p), nil
-}
-
-func errorCode(err error) string {
-	var se interface{ ErrorCode() string }
-	if errors.As(err, &se) {
-		return se.ErrorCode()
-	}
-	return ""
-}
-
-func newSplitTestReader(r io.Reader) *Reader {
-	return &Reader{buf: bufio.NewReaderSize(r, csvSplitSize*2)}
-}
+// The bound itself (limit, limit+1, lines across blocks, bytes consumed) is
+// tested in package linelimit. These tests check that the CSV reader is
+// wired to it: header and body, every record delimiter, valid input intact.
 
 func testReaderArgs(header, recordDelimiter string) *ReaderArgs {
 	return &ReaderArgs{
@@ -78,86 +39,6 @@ func testReaderArgs(header, recordDelimiter string) *ReaderArgs {
 		QuoteEscapeCharacter: defaultQuoteEscapeCharacter,
 		CommentCharacter:     defaultCommentCharacter,
 		unmarshaled:          true,
-	}
-}
-
-// TestNextSplitLineLimitBoundary checks the exact boundary of the per-line
-// limit, both for a line starting at the read position (skip == 0, the header
-// path) and for a line that starts inside the skipped block.
-func TestNextSplitLineLimitBoundary(t *testing.T) {
-	const prefix = "short,line\n"
-	cases := []struct {
-		name    string
-		skip    int
-		input   string
-		wantErr bool
-		wantLen int
-	}{
-		{"skip0-limit-newline", 0, strings.Repeat("y", testMaxLineSize) + "\nnext\n", false, testMaxLineSize + 1},
-		{"skip0-limit+1-newline", 0, strings.Repeat("y", testMaxLineSize+1) + "\nnext\n", true, 0},
-		{"skip0-limit-eof", 0, strings.Repeat("y", testMaxLineSize), false, testMaxLineSize},
-		{"skip0-limit+1-eof", 0, strings.Repeat("y", testMaxLineSize+1), true, 0},
-		{"block-straddle-limit", csvSplitSize, prefix + strings.Repeat("y", testMaxLineSize) + "\nnext\n", false, len(prefix) + testMaxLineSize + 1},
-		{"block-straddle-limit+1", csvSplitSize, prefix + strings.Repeat("y", testMaxLineSize+1) + "\nnext\n", true, 0},
-		{"block-from-start-limit", csvSplitSize, strings.Repeat("y", testMaxLineSize) + "\nnext\n", false, testMaxLineSize + 1},
-		{"block-from-start-limit+1", csvSplitSize, strings.Repeat("y", testMaxLineSize+1) + "\nnext\n", true, 0},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			r := newSplitTestReader(strings.NewReader(c.input))
-			got, err := r.nextSplit(c.skip, nil)
-			if c.wantErr {
-				if code := errorCode(err); code != overMaxRecordSizeCode {
-					t.Fatalf("want %s error, got err=%v (code %q), len=%d", overMaxRecordSizeCode, err, code, len(got))
-				}
-				if len(got) != 0 {
-					t.Fatalf("over-limit split must not return partial data, got %d bytes", len(got))
-				}
-				return
-			}
-			if err != nil && err != io.EOF {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if len(got) != c.wantLen {
-				t.Fatalf("want %d bytes, got %d", c.wantLen, len(got))
-			}
-		})
-	}
-}
-
-// TestNextSplitNoNewlineBounded feeds a large input without any newline and
-// verifies the splitter errors out after consuming a bounded amount of input
-// instead of buffering everything until EOF.
-func TestNextSplitNoNewlineBounded(t *testing.T) {
-	for _, skip := range []int{0, csvSplitSize} {
-		src := &countingByteReader{b: 'a', limit: 64 << 20}
-		r := newSplitTestReader(src)
-		got, err := r.nextSplit(skip, nil)
-		if code := errorCode(err); code != overMaxRecordSizeCode {
-			t.Fatalf("skip=%d: want %s error, got err=%v (code %q)", skip, overMaxRecordSizeCode, err, code)
-		}
-		// skip + line limit + at most one bufio buffer of read-ahead.
-		maxRead := int64(skip + testMaxLineSize + 2*csvSplitSize*2)
-		if src.n > maxRead {
-			t.Fatalf("skip=%d: consumed %d bytes of input, want <= %d", skip, src.n, maxRead)
-		}
-		if len(got) != 0 {
-			t.Fatalf("skip=%d: over-limit split returned %d bytes", skip, len(got))
-		}
-	}
-}
-
-func TestReaderHeaderLineTooLong(t *testing.T) {
-	src := &countingByteReader{b: 'h', limit: 64 << 20}
-	r, err := NewReader(io.NopCloser(src), testReaderArgs(use, "\n"))
-	if code := errorCode(err); code != overMaxRecordSizeCode {
-		if r != nil {
-			r.Close()
-		}
-		t.Fatalf("want %s error, got %v (code %q)", overMaxRecordSizeCode, err, code)
-	}
-	if src.n > int64(testMaxLineSize+4*csvSplitSize) {
-		t.Fatalf("consumed %d bytes of input for the header", src.n)
 	}
 }
 
@@ -175,6 +56,18 @@ func readAll(t *testing.T, r *Reader) ([][]string, error) {
 	}
 }
 
+// The header line is read in NewReader, so the error must come from there.
+func TestReaderHeaderLineTooLong(t *testing.T) {
+	input := strings.Repeat("h", linelimit.MaxLineSize+1) + "\n1,2\n"
+	r, err := NewReader(io.NopCloser(strings.NewReader(input)), testReaderArgs(use, "\n"))
+	if err != linelimit.ErrLineTooLong {
+		if r != nil {
+			r.Close()
+		}
+		t.Fatalf("want ErrLineTooLong, got %v", err)
+	}
+}
+
 func TestReaderBodyLineTooLong(t *testing.T) {
 	for _, delim := range []string{"\n", "\r\n", ";"} {
 		t.Run(strings.ReplaceAll(strings.ReplaceAll(delim, "\r", `\r`), "\n", `\n`), func(t *testing.T) {
@@ -182,7 +75,7 @@ func TestReaderBodyLineTooLong(t *testing.T) {
 			for range 2000 {
 				sb.WriteString("a,b" + delim)
 			}
-			sb.WriteString(strings.Repeat("y", testMaxLineSize+1) + delim)
+			sb.WriteString(strings.Repeat("y", linelimit.MaxLineSize+1) + delim)
 			sb.WriteString("c,d" + delim)
 			r, err := NewReader(io.NopCloser(strings.NewReader(sb.String())), testReaderArgs(none, delim))
 			if err != nil {
@@ -190,12 +83,12 @@ func TestReaderBodyLineTooLong(t *testing.T) {
 			}
 			defer r.Close()
 			recs, err := readAll(t, r)
-			if code := errorCode(err); code != overMaxRecordSizeCode {
-				t.Fatalf("want %s error, got %v (code %q) after %d records", overMaxRecordSizeCode, err, code, len(recs))
+			if err != linelimit.ErrLineTooLong {
+				t.Fatalf("want ErrLineTooLong, got %v after %d records", err, len(recs))
 			}
 			for _, rec := range recs {
 				for _, f := range rec {
-					if len(f) > testMaxLineSize {
+					if len(f) > linelimit.MaxLineSize {
 						t.Fatalf("record with %d-byte field returned despite limit", len(f))
 					}
 				}
@@ -208,7 +101,7 @@ func TestReaderBodyLineTooLong(t *testing.T) {
 // quoted fields containing newlines, alternative record delimiters and a
 // line that is exactly at the limit.
 func TestReaderValidInputUnchanged(t *testing.T) {
-	long := strings.Repeat("y", testMaxLineSize-2)
+	long := strings.Repeat("y", linelimit.MaxLineSize-2)
 	cases := []struct {
 		name   string
 		delim  string

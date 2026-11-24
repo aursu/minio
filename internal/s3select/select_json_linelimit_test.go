@@ -27,7 +27,7 @@ import (
 )
 
 // TestJSONLinesCompressedNoNewlineBounded is the JSON Lines sibling of the
-// CSV CVE-2026-39414 regression (issue #79): a small GZIP object that
+// CSV CVE-2026-39414 regression: a small GZIP object that
 // decompresses into a long run of bytes without any newline must fail with
 // OverMaxRecordSize after a bounded amount of decompressed input, instead of
 // being buffered whole. Open picks simdjson or the portable json.PReader
