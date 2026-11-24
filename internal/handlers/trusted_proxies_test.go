@@ -163,6 +163,13 @@ func TestGetSourceIP(t *testing.T) {
 			"192.0.2.1",
 		},
 		{
+			// One address, not a list: a trusted address in it is not
+			// walked past, as it would be in X-Forwarded-For.
+			"X-Real-IP is not a list", realIP, "10.0.0.1:5000",
+			http.Header{xRealIP: {"192.0.2.1", "10.0.0.5"}},
+			"10.0.0.5",
+		},
+		{
 			"X-Real-IP header not chosen", xff, "10.0.0.1:5000",
 			http.Header{xRealIP: {"192.0.2.1"}},
 			"10.0.0.1",
