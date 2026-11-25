@@ -145,6 +145,18 @@ var (
 			Type:        "duration",
 		},
 		config.HelpKV{
+			Key:         LoginMaxFailuresPerAccount,
+			Description: `failed logins of one account, from any client addresses, within login_account_window that lock the account out for every address for login_account_window; 0 turns this limit off` + defaultHelpPostfix(LoginMaxFailuresPerAccount),
+			Optional:    true,
+			Type:        "number",
+		},
+		config.HelpKV{
+			Key:         LoginAccountWindow,
+			Description: `the window login_max_failures_per_account counts in, and how long the account lockout lasts` + defaultHelpPostfix(LoginAccountWindow),
+			Optional:    true,
+			Type:        "duration",
+		},
+		config.HelpKV{
 			Key:         config.Comment,
 			Description: config.DefaultComment,
 			Optional:    true,
