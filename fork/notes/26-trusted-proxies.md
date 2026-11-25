@@ -62,7 +62,15 @@ client address.
      zones are dropped.
    - **Invalid values** fail the config lookup, as for other keys. The
      server applies the config even then; it then trusts no proxy, so
-     the failure is closed. The config is merged with the defaults before
+     the failure is closed. **Correction (2026-11-25, review of #51):**
+     the parsing sat at the start of `LookupConfig` and returned early,
+     so an invalid value also zeroed every api key parsed after it. On
+     startup that meant CORS open to `*`, no remote transport deadline,
+     and `requests_max` and `sync_events` at their defaults.
+     `mc admin config set` validates with the environment off, so an
+     invalid `MINIO_API_TRUSTED_PROXIES` reached the server unchecked.
+     The parsing is now last (PR #58). A failure in an earlier key
+     returns before it and leaves no proxy trusted. The config is merged with the defaults before
      the lookup, so a key that was never set has its default, and an
      empty value means what it says.
    - `_MINIO_API_XFF_HEADER` is removed, and `docs/config/README.md`

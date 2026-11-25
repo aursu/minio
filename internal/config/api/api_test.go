@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/minio/minio/internal/config"
 	"github.com/minio/minio/internal/handlers"
@@ -133,4 +134,64 @@ func TestLookupConfigTrustedProxies(t *testing.T) {
 			}
 		}
 	})
+}
+
+// The server applies the config even when LookupConfig fails. An invalid
+// trusted proxy setting must therefore not reset the other api keys: CORS
+// would open to "*", the remote transport would lose its deadline, and
+// requests_max and sync_events would fall back to their defaults.
+func TestLookupConfigInvalidTrustedProxiesKeepsOthers(t *testing.T) {
+	others := map[string]string{
+		apiCorsAllowOrigin:         "https://console.example.com",
+		apiRequestsMax:             "100",
+		apiRemoteTransportDeadline: "30m",
+		apiSyncEvents:              config.EnableOn,
+		apiObjectMaxVersions:       "5",
+	}
+	check := func(t *testing.T, cfg Config, err error) {
+		t.Helper()
+		if err == nil {
+			t.Fatal("expected an error")
+		}
+		if !slices.Equal(cfg.CorsAllowOrigin, []string{"https://console.example.com"}) ||
+			cfg.RequestsMax != 100 || cfg.RemoteTransportDeadline != 30*time.Minute ||
+			!cfg.SyncEvents || cfg.ObjectMaxVersions != 5 {
+			t.Errorf("other keys lost: cors %v, requests_max %d, remote_transport_deadline %v, sync_events %v, object_max_versions %d",
+				cfg.CorsAllowOrigin, cfg.RequestsMax, cfg.RemoteTransportDeadline, cfg.SyncEvents, cfg.ObjectMaxVersions)
+		}
+		if got := clientOf(t, cfg, "127.0.0.1"); got != "127.0.0.1" {
+			t.Errorf("an invalid setting trusts a proxy: got %s", got)
+		}
+	}
+
+	for key, value := range map[string]string{apiTrustedProxies: "proxy.example.com", apiTrustedProxyHeader: "x-client-ip"} {
+		t.Run("config "+key, func(t *testing.T) {
+			kvs := apiKVS(others)
+			kvs.Set(key, value)
+			cfg, err := LookupConfig(kvs)
+			check(t, cfg, err)
+		})
+	}
+	// mc admin config set validates with the environment off, so an
+	// invalid environment variable is found only when the server applies
+	// the config.
+	for env, value := range map[string]string{EnvAPITrustedProxies: "proxy.example.com", EnvAPITrustedProxyHeader: "x-client-ip"} {
+		t.Run("environment "+env, func(t *testing.T) {
+			t.Setenv(env, value)
+			cfg, err := LookupConfig(apiKVS(others))
+			check(t, cfg, err)
+		})
+	}
+}
+
+// A failure in another api key returns before the trusted proxies are
+// parsed: the applied config then trusts no proxy.
+func TestLookupConfigEarlierErrorTrustsNoProxy(t *testing.T) {
+	cfg, err := LookupConfig(apiKVS(map[string]string{apiListQuorum: "bogus"}))
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if got := clientOf(t, cfg, "127.0.0.1"); got != "127.0.0.1" {
+		t.Errorf("got %s", got)
+	}
 }
