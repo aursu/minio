@@ -59,12 +59,32 @@ client address.
    - **X-Real-IP is one address**, the last field if several are sent. A
      trusted address in it is the client, not a proxy to walk past.
    - **IPv4-mapped IPv6 addresses** are compared and reported as IPv4, and
-     zones are dropped.
+     zones are dropped. **Correction (2026-11-25, review of #51):** that
+     held for a single address in `trusted_proxies`, not for a prefix.
+     `::ffff:10.0.0.0/104` stayed an IPv6 prefix and never matched the
+     unmapped request addresses. Since PR #59 a mapped prefix of /96 or
+     longer becomes the IPv4 prefix it stands for (`10.0.0.0/8`), and a
+     shorter one is rejected.
    - **Invalid values** fail the config lookup, as for other keys. The
      server applies the config even then; it then trusts no proxy, so
-     the failure is closed. The config is merged with the defaults before
+     the failure is closed. **Correction (2026-11-25, review of #51):**
+     the parsing sat at the start of `LookupConfig` and returned early,
+     so an invalid value also zeroed every api key parsed after it. On
+     startup that meant CORS open to `*`, no remote transport deadline,
+     and `requests_max` and `sync_events` at their defaults.
+     `mc admin config set` validates with the environment off, so an
+     invalid `MINIO_API_TRUSTED_PROXIES` reached the server unchecked.
+     The parsing is now last (PR #58). A failure in an earlier key
+     returns before it and leaves no proxy trusted. The config is merged with the defaults before
      the lookup, so a key that was never set has its default, and an
      empty value means what it says.
+     **Correction (2026-11-25, CI of #58):** the #58 test expected
+     `requests_max` to keep its config value, but `make test` sets
+     `MINIO_API_REQUESTS_MAX=10000`, and the environment overrides the
+     config. The targeted run on media-gw did not set it, so the test
+     passed there and failed in CI; #58 was merged with that job red,
+     and `master` failed it too. The test now clears the api variables
+     it reads (PR #60).
    - `_MINIO_API_XFF_HEADER` is removed, and `docs/config/README.md`
      documents the keys and the proxy setup.
 2. **`fix(handlers)`: the forwarder sets `X-Real-IP`, never passes on
