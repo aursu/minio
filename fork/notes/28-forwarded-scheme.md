@@ -41,6 +41,12 @@ from a trusted proxy, and this was the last header outside it.
    passes on the client's.** It used to set the header only when the
    request had none. It now sends the scheme the client used: as a
    trusted proxy in front reported it, or as received.
+   **Correction (2026-11-25, review of #53):** `X-Forwarded-Scheme` was
+   still passed on as received. MinIO reads `X-Forwarded-Proto` first, and
+   the forwarder always sets it, so a receiving MinIO was not misled; a
+   receiver that reads `X-Forwarded-Scheme` first would have been. The
+   forwarder now removes it. A mutation that keeps it is caught by both
+   forwarder tests.
 
 Writing this PR also turned up a defect in #52. The forwarder passed on
 the client's own `Forwarded` header. The fix is on the #52 branch, as

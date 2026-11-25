@@ -47,6 +47,7 @@ func TestForwarderHeaders(t *testing.T) {
 	r.Header.Set(xForwardedFor, "1.1.1.1")
 	r.Header.Set(forwarded, "for=1.1.1.1")
 	r.Header.Set(xForwardedProto, "javascript")
+	r.Header.Set(xForwardedScheme, "javascript")
 	r.URL.Scheme, r.URL.Host = target.Scheme, target.Host
 	f.ServeHTTP(httptest.NewRecorder(), r)
 
@@ -61,6 +62,9 @@ func TestForwarderHeaders(t *testing.T) {
 	}
 	if v := got.Get(xForwardedProto); v != "http" {
 		t.Errorf("X-Forwarded-Proto: got %q, want the scheme received, not the client's", v)
+	}
+	if v, ok := got[xForwardedScheme]; ok {
+		t.Errorf("X-Forwarded-Scheme: got %q, want it removed", v)
 	}
 	// What the receiving side resolves, trusting this forwarder.
 	withTrustedProxies(t, mustTrustedProxies(t, "10.0.0.1", ProxyHeaderForwarded))
@@ -85,13 +89,18 @@ func TestForwarderSchemeFromTrustedProxy(t *testing.T) {
 	}
 
 	f := NewForwarder(&Forwarder{RoundTripper: http.DefaultTransport})
-	r := httptest.NewRequest(http.MethodGet, "/bucket/object", nil)
-	r.RemoteAddr = "10.0.0.1:5000"
-	r.Header.Set(xForwardedProto, "https")
-	r.URL.Scheme, r.URL.Host = target.Scheme, target.Host
-	f.ServeHTTP(httptest.NewRecorder(), r)
+	for _, header := range []string{xForwardedProto, xForwardedScheme} {
+		r := httptest.NewRequest(http.MethodGet, "/bucket/object", nil)
+		r.RemoteAddr = "10.0.0.1:5000"
+		r.Header.Set(header, "https")
+		r.URL.Scheme, r.URL.Host = target.Scheme, target.Host
+		f.ServeHTTP(httptest.NewRecorder(), r)
 
-	if v := got.Get(xForwardedProto); v != "https" {
-		t.Errorf("X-Forwarded-Proto: got %q, want https", v)
+		if v := got.Get(xForwardedProto); v != "https" {
+			t.Errorf("%s from the proxy: X-Forwarded-Proto: got %q, want https", header, v)
+		}
+		if v, ok := got[xForwardedScheme]; ok {
+			t.Errorf("%s from the proxy: X-Forwarded-Scheme: got %q, want it removed", header, v)
+		}
 	}
 }
