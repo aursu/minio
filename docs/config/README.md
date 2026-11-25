@@ -148,7 +148,7 @@ odirect                         (boolean)   set to enable or disable O_DIRECT fo
 root_access                     (boolean)   turn 'off' root credential access for all API calls including s3, admin operations (default: 'on')
 sync_events                     (boolean)   set to enable synchronous bucket notifications (default: 'off')
 object_max_versions             (number)    set max allowed number of versions per object (default: '9223372036854775807')
-trusted_proxies                 (csv)       set comma separated list of IP addresses and CIDR prefixes of the proxies whose forwarding header gives the client address; "none" or empty trusts no proxy (default: '127.0.0.1/32,::1/128')
+trusted_proxies                 (csv)       set comma separated list of IP addresses and CIDR prefixes of the proxies whose forwarding header gives the client address, besides loopback and the cluster nodes, which are always trusted; "none" or empty lists none (default: '')
 trusted_proxy_header            (string)    set the header the trusted proxies write the client address to, "x-forwarded-for", "x-real-ip" or "forwarded" (RFC 7239) (default: 'x-forwarded-for')
 ```
 
@@ -170,18 +170,20 @@ MINIO_API_ODIRECT                         (boolean)   set to enable or disable O
 MINIO_API_ROOT_ACCESS                     (boolean)   turn 'off' root credential access for all API calls including s3, admin operations (default: 'on')
 MINIO_API_SYNC_EVENTS                     (boolean)   set to enable synchronous bucket notifications (default: 'off')
 MINIO_API_OBJECT_MAX_VERSIONS             (number)    set max allowed number of versions per object (default: '9223372036854775807')
-MINIO_API_TRUSTED_PROXIES                 (csv)       set comma separated list of IP addresses and CIDR prefixes of the proxies whose forwarding header gives the client address; "none" trusts no proxy (an empty variable counts as unset) (default: '127.0.0.1/32,::1/128')
+MINIO_API_TRUSTED_PROXIES                 (csv)       set comma separated list of IP addresses and CIDR prefixes of the proxies whose forwarding header gives the client address, besides loopback and the cluster nodes, which are always trusted; "none" lists none (an empty variable counts as unset) (default: '')
 MINIO_API_TRUSTED_PROXY_HEADER            (string)    set the header the trusted proxies write the client address to, "x-forwarded-for", "x-real-ip" or "forwarded" (RFC 7239) (default: 'x-forwarded-for')
 ```
 
 #### Client address behind a proxy
 
-The client address is used by the `aws:SourceIp` policy condition, the audit log, bucket notifications and the login rate limits. It is the address of the connection peer. Only when the peer is listed in `trusted_proxies` is it taken from the `trusted_proxy_header` instead: the header is read from the right, past every trusted proxy, and the first address that is not a trusted proxy is the client.
+The client address is used by the `aws:SourceIp` policy condition, the audit log, bucket notifications and the login rate limits. It is the address of the connection peer. Only when the peer is a trusted proxy is it taken from the `trusted_proxy_header` instead: the header is read from the right, past every trusted proxy, and the first address that is not a trusted proxy is the client.
 
 - List every proxy in front of MinIO, and nothing else. A forwarding header from any other address is ignored, because its sender can write anything into it.
 - The proxy must append the address of its peer to `X-Forwarded-For` (nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`), set `X-Real-IP` to it (nginx: `proxy_set_header X-Real-IP $remote_addr;`), or append an element with `for=` to `Forwarded` (RFC 7239; HAProxy: `option forwarded`). Only the `for` parameter of `Forwarded` is used; an element without it stops the walk.
-- The default trusts loopback only. The SFTP and FTP servers call the S3 API over loopback and pass the address of their own client in all three headers. The embedded console passes it in `X-Forwarded-For` only.
-- A federated deployment or a site replication peer that forwards requests to this one is a proxy as well.
+- Loopback and the nodes of this deployment are always trusted, in addition to the list:
+  - The SFTP and FTP servers call the S3 API over loopback and pass the address of their own client in all three headers. The embedded console passes it in `X-Forwarded-For` only.
+  - A node forwards some admin requests to another node: pool status and decommission, heal status, batch job cancel. The names of the nodes are resolved at startup and again every minute.
+- A federated deployment or a site replication peer that forwards requests to this one is a proxy as well, and must be listed.
 
 #### Notifications
 

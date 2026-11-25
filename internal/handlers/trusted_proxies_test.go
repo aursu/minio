@@ -19,6 +19,7 @@ package handlers
 
 import (
 	"net/http"
+	"net/netip"
 	"testing"
 )
 
@@ -85,9 +86,6 @@ func TestParseTrustedProxies(t *testing.T) {
 		if tp := mustTrustedProxies(t, list, ProxyHeaderXForwardedFor); len(tp.prefixes) != 0 {
 			t.Errorf("list %q: got %v", list, tp.prefixes)
 		}
-	}
-	if tp := mustTrustedProxies(t, DefaultTrustedProxies, ProxyHeaderXForwardedFor); len(tp.prefixes) != 2 {
-		t.Errorf("default list: got %v", tp.prefixes)
 	}
 
 	for _, bad := range []struct{ list, header string }{
@@ -277,22 +275,48 @@ func TestGetSourceIPBrackets(t *testing.T) {
 	}
 }
 
-// The default trusts loopback, where the embedded console and the SFTP and
-// FTP servers call the S3 API from, and nothing else.
-func TestDefaultTrustedProxies(t *testing.T) {
-	withTrustedProxies(t, mustTrustedProxies(t, DefaultTrustedProxies, ProxyHeaderXForwardedFor))
+// withClusterNodes sets the cluster node addresses for one test.
+func withClusterNodes(t *testing.T, addrs ...string) {
+	t.Helper()
+	prev := clusterNodes.Load()
+	nodes := make([]netip.Addr, 0, len(addrs))
+	for _, a := range addrs {
+		nodes = append(nodes, netip.MustParseAddr(a))
+	}
+	SetClusterNodes(nodes)
+	t.Cleanup(func() { clusterNodes.Store(prev) })
+}
+
+// Loopback, where the embedded console and the SFTP and FTP servers call the
+// S3 API from, and the cluster nodes, which forward requests to each other,
+// are trusted whatever the list says. Nothing else is.
+func TestAlwaysTrustedProxies(t *testing.T) {
+	withClusterNodes(t, "10.0.0.2", "2001:db8::2", "::ffff:10.0.0.3")
 	h := http.Header{xForwardedFor: {"192.0.2.1"}}
-	for peer, want := range map[string]string{
-		"127.0.0.1:5000":  "192.0.2.1",
-		"[::1]:5000":      "192.0.2.1",
-		"127.0.0.2:5000":  "127.0.0.2",
-		"10.0.0.1:5000":   "10.0.0.1",
-		"[fe80::1]:5000":  "fe80::1",
-		"192.0.2.99:5000": "192.0.2.99",
-	} {
-		if got := GetSourceIPRaw(&http.Request{RemoteAddr: peer, Header: h}); got != want {
-			t.Errorf("peer %s: got %q, want %q", peer, got, want)
+	for _, list := range []string{"", "198.51.100.0/24"} {
+		withTrustedProxies(t, mustTrustedProxies(t, list, ProxyHeaderXForwardedFor))
+		for peer, want := range map[string]string{
+			"127.0.0.1:5000":          "192.0.2.1",
+			"127.0.0.2:5000":          "192.0.2.1",
+			"[::1]:5000":              "192.0.2.1",
+			"[::ffff:127.0.0.1]:5000": "192.0.2.1",
+			"10.0.0.2:5000":           "192.0.2.1",
+			"[2001:db8::2]:5000":      "192.0.2.1",
+			"10.0.0.3:5000":           "192.0.2.1",
+			"10.0.0.1:5000":           "10.0.0.1",
+			"[fe80::1]:5000":          "fe80::1",
+			"192.0.2.99:5000":         "192.0.2.99",
+		} {
+			if got := GetSourceIPRaw(&http.Request{RemoteAddr: peer, Header: h}); got != want {
+				t.Errorf("list %q, peer %s: got %q, want %q", list, peer, got, want)
+			}
 		}
+	}
+
+	// A node is trusted only while it is one.
+	withClusterNodes(t)
+	if got := GetSourceIPRaw(&http.Request{RemoteAddr: "10.0.0.2:5000", Header: h}); got != "10.0.0.2" {
+		t.Errorf("former node: got %q", got)
 	}
 }
 
@@ -300,7 +324,7 @@ func TestDefaultTrustedProxies(t *testing.T) {
 // whichever header the deployment trusts.
 func TestSetForwardingHeaders(t *testing.T) {
 	for _, header := range []string{ProxyHeaderXForwardedFor, ProxyHeaderXRealIP, ProxyHeaderForwarded} {
-		withTrustedProxies(t, mustTrustedProxies(t, DefaultTrustedProxies, header))
+		withTrustedProxies(t, mustTrustedProxies(t, "", header))
 		for _, addr := range []string{"192.0.2.1", "2001:db8:cafe::17"} {
 			h := http.Header{
 				xForwardedFor: {"1.1.1.1"},

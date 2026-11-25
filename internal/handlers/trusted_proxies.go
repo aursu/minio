@@ -46,19 +46,15 @@ const (
 	ProxyHeaderForwarded     = "forwarded" // RFC 7239
 )
 
-// DefaultTrustedProxies trusts loopback only. The embedded console and the
-// SFTP and FTP servers call the S3 API over loopback and pass the address
-// of their own client in a forwarding header.
-const DefaultTrustedProxies = "127.0.0.1/32,::1/128"
-
-// TrustNoProxy is the list that trusts no proxy. An empty list does too,
+// TrustNoProxy is the list that names no proxy. An empty list does too,
 // but an empty environment variable counts as unset in MinIO, so the
 // environment needs a word for it.
 const TrustNoProxy = "none"
 
 // ParseTrustedProxies parses a comma separated list of IP addresses and
 // CIDR prefixes, and the name of the header those proxies set. An empty
-// list, or TrustNoProxy, trusts no proxy.
+// list, or TrustNoProxy, names no proxy. Loopback and the cluster nodes are
+// trusted whatever the list says, see trusts.
 func ParseTrustedProxies(list, header string) (TrustedProxies, error) {
 	var t TrustedProxies
 	if strings.TrimSpace(list) == TrustNoProxy {
@@ -102,7 +98,7 @@ func ParseTrustedProxies(list, header string) (TrustedProxies, error) {
 var trustedProxies atomic.Pointer[TrustedProxies]
 
 func init() {
-	t, err := ParseTrustedProxies(DefaultTrustedProxies, ProxyHeaderXForwardedFor)
+	t, err := ParseTrustedProxies("", ProxyHeaderXForwardedFor)
 	if err != nil {
 		panic(err)
 	}
@@ -114,7 +110,34 @@ func SetTrustedProxies(t TrustedProxies) {
 	trustedProxies.Store(&t)
 }
 
+// clusterNodes holds the addresses of the nodes of this deployment.
+var clusterNodes atomic.Pointer[map[netip.Addr]struct{}]
+
+// SetClusterNodes replaces the addresses of the nodes of this deployment.
+// The nodes forward requests to each other, so they are trusted proxies
+// whatever the list says.
+func SetClusterNodes(addrs []netip.Addr) {
+	nodes := make(map[netip.Addr]struct{}, len(addrs))
+	for _, addr := range addrs {
+		nodes[addr.Unmap().WithZone("")] = struct{}{}
+	}
+	clusterNodes.Store(&nodes)
+}
+
+// trusts reports whether addr is a trusted proxy. Loopback and the cluster
+// nodes always are: the embedded console and the SFTP and FTP servers call
+// the S3 API over loopback, and a node forwards requests to another node.
+// Each passes the client address in the forwarding headers, and the
+// administrator should not have to list them.
 func (t *TrustedProxies) trusts(addr netip.Addr) bool {
+	if addr.IsLoopback() {
+		return true
+	}
+	if nodes := clusterNodes.Load(); nodes != nil {
+		if _, ok := (*nodes)[addr]; ok {
+			return true
+		}
+	}
 	for _, p := range t.prefixes {
 		if p.Contains(addr) {
 			return true
