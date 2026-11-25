@@ -190,12 +190,15 @@ func (rw *headerRewriter) Rewrite(req *http.Request) {
 
 	// X-Forwarded-Proto is the scheme the client used: as a trusted proxy
 	// in front of this deployment reported it, or as received here. It is
-	// never passed on from the client.
+	// never passed on from the client. X-Forwarded-Scheme is removed: it
+	// came from the client or the proxy in front, and a receiver that reads
+	// it before X-Forwarded-Proto would take it as is.
 	clientScheme := GetSourceScheme(req)
 	if clientScheme == "" {
 		clientScheme = received
 	}
 	req.Header.Set(xForwardedProto, clientScheme)
+	req.Header.Del(xForwardedScheme)
 
 	if xfPort := req.Header.Get(xForwardedPort); xfPort == "" {
 		req.Header.Set(xForwardedPort, forwardedPort(req))
