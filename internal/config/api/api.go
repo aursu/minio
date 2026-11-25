@@ -169,7 +169,7 @@ var (
 		},
 		config.KV{
 			Key:   apiTrustedProxies,
-			Value: handlers.DefaultTrustedProxies,
+			Value: "",
 		},
 		config.KV{
 			Key:   apiTrustedProxyHeader,
@@ -233,18 +233,6 @@ func LookupConfig(kvs config.KVS) (cfg Config, err error) {
 		EnableODirect: enableODirect || !disableODirect,
 		GzipObjects:   gzipObjects,
 		RootAccess:    rootAccess,
-	}
-
-	// An empty list is kept as set: it trusts no proxy. A key that was
-	// never set has its default here, because the config is merged with
-	// DefaultKVS before it is looked up.
-	cfg.TrustedProxies, err = handlers.ParseTrustedProxies(
-		env.Get(EnvAPITrustedProxies, kvs.Get(apiTrustedProxies)),
-		env.Get(EnvAPITrustedProxyHeader, kvs.GetWithDefault(apiTrustedProxyHeader, DefaultKVS)))
-	if err != nil {
-		// cfg is applied even when invalid; its zero TrustedProxies
-		// trusts no proxy.
-		return cfg, err
 	}
 
 	var corsAllowOrigin []string
@@ -366,6 +354,20 @@ func LookupConfig(kvs config.KVS) (cfg Config, err error) {
 		cfg.ObjectMaxVersions = maxVersions
 	} else {
 		cfg.ObjectMaxVersions = math.MaxInt64
+	}
+
+	// Parsed last. The server applies cfg even when LookupConfig fails, so
+	// an invalid value here must not cost the keys above their values, and
+	// a failure above returns before this point, leaving the zero
+	// TrustedProxies, which trusts no proxy. An empty list is kept as set:
+	// it trusts no proxy too. A key that was never set has its default
+	// here, because the config is merged with DefaultKVS before it is
+	// looked up.
+	cfg.TrustedProxies, err = handlers.ParseTrustedProxies(
+		env.Get(EnvAPITrustedProxies, kvs.Get(apiTrustedProxies)),
+		env.Get(EnvAPITrustedProxyHeader, kvs.GetWithDefault(apiTrustedProxyHeader, DefaultKVS)))
+	if err != nil {
+		return cfg, err
 	}
 
 	return cfg, nil

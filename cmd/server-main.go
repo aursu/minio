@@ -429,6 +429,7 @@ func serverHandleCmdArgs(ctxt serverCtxt) {
 	globalInternodeTransport = NewInternodeHTTPTransport(ctxt.MaxIdleConnsPerHost)()
 	globalRemoteTargetTransport = NewRemoteTargetHTTPTransport(false)()
 	globalProxyEndpoints = GetProxyEndpoints(globalEndpoints, globalRemoteTargetTransport)
+	trustClusterNodes(GlobalContext, globalProxyEndpoints)
 
 	globalForwarder = handlers.NewForwarder(&handlers.Forwarder{
 		PassHost:     true,

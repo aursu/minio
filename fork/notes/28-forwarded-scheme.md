@@ -34,6 +34,9 @@ from a trusted proxy, and this was the last header outside it.
      tests checked that headers were trusted from any sender.
      `TestObjectLocation` now sends its scheme headers from loopback,
      which is trusted by default, and has a case for an untrusted peer.
+     **Correction (2026-11-25, merge of #61):** loopback is no longer a
+     default that a list replaces; it is always trusted (note 33). The
+     test comments say so.
 2. **`fix(handlers)`: the forwarder sets `X-Forwarded-Proto`, never
    passes on the client's.** It used to set the header only when the
    request had none. It now sends the scheme the client used: as a

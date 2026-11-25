@@ -118,7 +118,7 @@ var (
 		},
 		config.HelpKV{
 			Key:         apiTrustedProxies,
-			Description: `set comma separated list of IP addresses and CIDR prefixes of the proxies whose forwarding header gives the client address; "none" or empty trusts no proxy` + defaultHelpPostfix(apiTrustedProxies),
+			Description: `set comma separated list of IP addresses and CIDR prefixes of the proxies whose forwarding header gives the client address, besides loopback and the cluster nodes, which are always trusted; "none" or empty lists none` + defaultHelpPostfix(apiTrustedProxies),
 			Optional:    true,
 			Type:        "csv",
 		},
