@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync/atomic"
 )
@@ -46,27 +47,25 @@ const (
 	ProxyHeaderForwarded     = "forwarded" // RFC 7239
 )
 
-// DefaultTrustedProxies trusts loopback only. The embedded console and the
-// SFTP and FTP servers call the S3 API over loopback and pass the address
-// of their own client in a forwarding header.
-const DefaultTrustedProxies = "127.0.0.1/32,::1/128"
-
-// TrustNoProxy is the list that trusts no proxy. An empty list does too,
+// TrustNoProxy is the list that names no proxy. An empty list does too,
 // but an empty environment variable counts as unset in MinIO, so the
 // environment needs a word for it.
 const TrustNoProxy = "none"
 
 // ParseTrustedProxies parses a comma separated list of IP addresses and
 // CIDR prefixes, and the name of the header those proxies set. An empty
-// list, or TrustNoProxy, trusts no proxy.
+// list, or TrustNoProxy, names no proxy. Loopback and the cluster nodes are
+// trusted whatever the list says, see trusts.
 func ParseTrustedProxies(list, header string) (TrustedProxies, error) {
 	var t TrustedProxies
-	if strings.TrimSpace(list) == TrustNoProxy {
+	// Header names are case-insensitive (RFC 9110), and "none" is read
+	// the same way, so a value copied from a proxy config works.
+	if strings.EqualFold(strings.TrimSpace(list), TrustNoProxy) {
 		list = ""
 	}
-	switch header {
+	switch name := strings.ToLower(strings.TrimSpace(header)); name {
 	case ProxyHeaderXForwardedFor, ProxyHeaderXRealIP, ProxyHeaderForwarded:
-		t.header = http.CanonicalHeaderKey(header)
+		t.header = http.CanonicalHeaderKey(name)
 	default:
 		return t, fmt.Errorf("unsupported proxy header %q, expecting %q, %q or %q",
 			header, ProxyHeaderXForwardedFor, ProxyHeaderXRealIP, ProxyHeaderForwarded)
@@ -85,6 +84,15 @@ func ParseTrustedProxies(list, header string) (TrustedProxies, error) {
 			addr = addr.Unmap()
 			prefix = netip.PrefixFrom(addr, addr.BitLen())
 		}
+		// Request addresses are compared unmapped, as IPv4, so an
+		// IPv4-mapped prefix must become the IPv4 prefix it stands for, or
+		// it would never match. Shorter than /96 it is not one.
+		if a := prefix.Addr(); a.Is4In6() {
+			if prefix.Bits() < 96 {
+				return t, fmt.Errorf("invalid trusted proxy %q: an IPv4-mapped prefix must be /96 or longer", item)
+			}
+			prefix = netip.PrefixFrom(a.Unmap(), prefix.Bits()-96)
+		}
 		t.prefixes = append(t.prefixes, prefix.Masked())
 	}
 	return t, nil
@@ -93,7 +101,7 @@ func ParseTrustedProxies(list, header string) (TrustedProxies, error) {
 var trustedProxies atomic.Pointer[TrustedProxies]
 
 func init() {
-	t, err := ParseTrustedProxies(DefaultTrustedProxies, ProxyHeaderXForwardedFor)
+	t, err := ParseTrustedProxies("", ProxyHeaderXForwardedFor)
 	if err != nil {
 		panic(err)
 	}
@@ -105,7 +113,34 @@ func SetTrustedProxies(t TrustedProxies) {
 	trustedProxies.Store(&t)
 }
 
+// clusterNodes holds the addresses of the nodes of this deployment.
+var clusterNodes atomic.Pointer[map[netip.Addr]struct{}]
+
+// SetClusterNodes replaces the addresses of the nodes of this deployment.
+// The nodes forward requests to each other, so they are trusted proxies
+// whatever the list says.
+func SetClusterNodes(addrs []netip.Addr) {
+	nodes := make(map[netip.Addr]struct{}, len(addrs))
+	for _, addr := range addrs {
+		nodes[addr.Unmap().WithZone("")] = struct{}{}
+	}
+	clusterNodes.Store(&nodes)
+}
+
+// trusts reports whether addr is a trusted proxy. Loopback and the cluster
+// nodes always are: the embedded console and the SFTP and FTP servers call
+// the S3 API over loopback, and a node forwards requests to another node.
+// Each passes the client address in the forwarding headers, and the
+// administrator should not have to list them.
 func (t *TrustedProxies) trusts(addr netip.Addr) bool {
+	if addr.IsLoopback() {
+		return true
+	}
+	if nodes := clusterNodes.Load(); nodes != nil {
+		if _, ok := (*nodes)[addr]; ok {
+			return true
+		}
+	}
 	for _, p := range t.prefixes {
 		if p.Contains(addr) {
 			return true
@@ -315,19 +350,54 @@ func forwardedForParam(addr string) string {
 
 // parseNode parses an address as proxies write it: an IP address, with an
 // optional port, IPv6 optionally in brackets. IPv4-mapped IPv6 addresses
-// are returned as IPv4.
+// are returned as IPv4. Brackets come in pairs and only around IPv6; a
+// port is a decimal number, or an obfuscated port of RFC 7239 ("_abc").
 func parseNode(s string) (netip.Addr, bool) {
 	if addr, err := netip.ParseAddr(s); err == nil {
 		return addr.Unmap().WithZone(""), true
 	}
-	if host, _, err := net.SplitHostPort(s); err == nil {
+	bracketed := strings.HasPrefix(s, "[")
+	if host, port, err := net.SplitHostPort(s); err == nil {
+		if !isPort(port) {
+			return netip.Addr{}, false
+		}
 		s = host
+	} else if bracketed && strings.HasSuffix(s, "]") {
+		s = s[1 : len(s)-1]
 	} else {
-		s = strings.TrimSuffix(strings.TrimPrefix(s, "["), "]")
+		return netip.Addr{}, false
 	}
 	addr, err := netip.ParseAddr(s)
-	if err != nil {
+	if err != nil || bracketed != addr.Is6() {
 		return netip.Addr{}, false
 	}
 	return addr.Unmap().WithZone(""), true
+}
+
+// isPort reports whether s is a port as RFC 7239 writes it (node-port): a
+// decimal number up to 65535, or "_" and an obfuscated identifier.
+func isPort(s string) bool {
+	if obf, ok := strings.CutPrefix(s, "_"); ok {
+		if obf == "" {
+			return false
+		}
+		for _, c := range obf {
+			switch {
+			case 'a' <= c && c <= 'z', 'A' <= c && c <= 'Z', '0' <= c && c <= '9', c == '.', c == '_', c == '-':
+			default:
+				return false
+			}
+		}
+		return true
+	}
+	if s == "" || len(s) > 5 {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	n, err := strconv.Atoi(s)
+	return err == nil && n <= 65535
 }
