@@ -92,11 +92,75 @@ func TestParseTrustedProxies(t *testing.T) {
 		{"10.0.0.0/33", ProxyHeaderXForwardedFor},
 		{"proxy.example.com", ProxyHeaderXForwardedFor},
 		{"10.0.0.1", "x-client-ip"},
-		{"10.0.0.1", "X-Forwarded-For"},
 		{"10.0.0.1", ""},
+		{"nothing", ProxyHeaderXForwardedFor},
 	} {
 		if _, err := ParseTrustedProxies(bad.list, bad.header); err == nil {
 			t.Errorf("ParseTrustedProxies(%q, %q): expected an error", bad.list, bad.header)
+		}
+	}
+}
+
+// Header names are case-insensitive, and "none" is read the same way, so
+// values copied from a proxy config work.
+func TestParseTrustedProxiesCase(t *testing.T) {
+	for _, c := range []struct{ header, want string }{
+		{"X-Forwarded-For", "X-Forwarded-For"},
+		{"X-REAL-IP", "X-Real-Ip"},
+		{"Forwarded", "Forwarded"},
+		{" x-real-ip ", "X-Real-Ip"},
+	} {
+		if tp := mustTrustedProxies(t, "10.0.0.1", c.header); tp.header != c.want {
+			t.Errorf("header %q: got %q, want %q", c.header, tp.header, c.want)
+		}
+	}
+	for _, list := range []string{"NONE", "None", " nOnE "} {
+		if tp := mustTrustedProxies(t, list, ProxyHeaderXForwardedFor); len(tp.prefixes) != 0 {
+			t.Errorf("list %q: got %v", list, tp.prefixes)
+		}
+	}
+}
+
+func TestParseNode(t *testing.T) {
+	for s, want := range map[string]string{
+		"192.0.2.1":                "192.0.2.1",
+		"192.0.2.1:80":             "192.0.2.1",
+		"192.0.2.1:65535":          "192.0.2.1",
+		"192.0.2.1:_hidden.port-1": "192.0.2.1",
+		"2001:db8::1":              "2001:db8::1",
+		"[2001:db8::1]":            "2001:db8::1",
+		"[2001:db8::1]:4711":       "2001:db8::1",
+		"[2001:db8::1]:_x":         "2001:db8::1",
+		"[::ffff:192.0.2.1]":       "192.0.2.1",
+		"[fe80::1%eth0]:80":        "fe80::1",
+		"::ffff:192.0.2.1":         "192.0.2.1",
+		"[2001:db8::1":             "",
+		"2001:db8::1]":             "",
+		"[192.0.2.1]":              "",
+		"[192.0.2.1]:80":           "",
+		"192.0.2.1:abc":            "",
+		"192.0.2.1:":               "",
+		"192.0.2.1:65536":          "",
+		"192.0.2.1:123456":         "",
+		"192.0.2.1:+80":            "",
+		"192.0.2.1:_":              "",
+		"192.0.2.1:_a/b":           "",
+		"[2001:db8::1]:x":          "",
+		"unknown":                  "",
+		"":                         "",
+		"proxy.example.com:80":     "",
+		"[[2001:db8::1]]":          "",
+		"192.0.2.1:80:80":          "",
+		"[2001:db8::1]:80]":        "",
+		"2001:db8::1:80":           "2001:db8::1:80",
+	} {
+		addr, ok := parseNode(s)
+		got := ""
+		if ok {
+			got = addr.String()
+		}
+		if got != want {
+			t.Errorf("parseNode(%q): got %q, want %q", s, got, want)
 		}
 	}
 }

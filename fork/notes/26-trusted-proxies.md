@@ -60,7 +60,12 @@ client address.
    - **`api trusted_proxy_header`** (`MINIO_API_TRUSTED_PROXY_HEADER`):
      `x-forwarded-for` (default) or `x-real-ip`. It is configured, not
      guessed. A proxy rewrites only its own header, and any other header
-     still carries what the client sent.
+     still carries what the client sent. **Correction (2026-11-25,
+     second review of #51):** the value and `none` had to be lowercase,
+     so `X-Forwarded-For` copied from a proxy config was rejected; both
+     are now read without case. Hops with unpaired brackets or a
+     non-numeric port were read as addresses; they now stop the walk
+     (note 34).
    - **X-Real-IP is one address**, the last field if several are sent. A
      trusted address in it is the client, not a proxy to walk past.
    - **IPv4-mapped IPv6 addresses** are compared and reported as IPv4, and

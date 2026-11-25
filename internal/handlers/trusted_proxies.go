@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync/atomic"
 )
@@ -57,12 +58,14 @@ const TrustNoProxy = "none"
 // trusted whatever the list says, see trusts.
 func ParseTrustedProxies(list, header string) (TrustedProxies, error) {
 	var t TrustedProxies
-	if strings.TrimSpace(list) == TrustNoProxy {
+	// Header names are case-insensitive (RFC 9110), and "none" is read
+	// the same way, so a value copied from a proxy config works.
+	if strings.EqualFold(strings.TrimSpace(list), TrustNoProxy) {
 		list = ""
 	}
-	switch header {
+	switch name := strings.ToLower(strings.TrimSpace(header)); name {
 	case ProxyHeaderXForwardedFor, ProxyHeaderXRealIP, ProxyHeaderForwarded:
-		t.header = http.CanonicalHeaderKey(header)
+		t.header = http.CanonicalHeaderKey(name)
 	default:
 		return t, fmt.Errorf("unsupported proxy header %q, expecting %q, %q or %q",
 			header, ProxyHeaderXForwardedFor, ProxyHeaderXRealIP, ProxyHeaderForwarded)
@@ -276,19 +279,54 @@ func forwardedForParam(addr string) string {
 
 // parseNode parses an address as proxies write it: an IP address, with an
 // optional port, IPv6 optionally in brackets. IPv4-mapped IPv6 addresses
-// are returned as IPv4.
+// are returned as IPv4. Brackets come in pairs and only around IPv6; a
+// port is a decimal number, or an obfuscated port of RFC 7239 ("_abc").
 func parseNode(s string) (netip.Addr, bool) {
 	if addr, err := netip.ParseAddr(s); err == nil {
 		return addr.Unmap().WithZone(""), true
 	}
-	if host, _, err := net.SplitHostPort(s); err == nil {
+	bracketed := strings.HasPrefix(s, "[")
+	if host, port, err := net.SplitHostPort(s); err == nil {
+		if !isPort(port) {
+			return netip.Addr{}, false
+		}
 		s = host
+	} else if bracketed && strings.HasSuffix(s, "]") {
+		s = s[1 : len(s)-1]
 	} else {
-		s = strings.TrimSuffix(strings.TrimPrefix(s, "["), "]")
+		return netip.Addr{}, false
 	}
 	addr, err := netip.ParseAddr(s)
-	if err != nil {
+	if err != nil || bracketed != addr.Is6() {
 		return netip.Addr{}, false
 	}
 	return addr.Unmap().WithZone(""), true
+}
+
+// isPort reports whether s is a port as RFC 7239 writes it (node-port): a
+// decimal number up to 65535, or "_" and an obfuscated identifier.
+func isPort(s string) bool {
+	if obf, ok := strings.CutPrefix(s, "_"); ok {
+		if obf == "" {
+			return false
+		}
+		for _, c := range obf {
+			switch {
+			case 'a' <= c && c <= 'z', 'A' <= c && c <= 'Z', '0' <= c && c <= '9', c == '.', c == '_', c == '-':
+			default:
+				return false
+			}
+		}
+		return true
+	}
+	if s == "" || len(s) > 5 {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	n, err := strconv.Atoi(s)
+	return err == nil && n <= 65535
 }
