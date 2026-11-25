@@ -39,6 +39,33 @@ func withTrustedProxies(t *testing.T, tp TrustedProxies) {
 	t.Cleanup(func() { trustedProxies.Store(prev) })
 }
 
+// An IPv4-mapped IPv6 prefix stands for the IPv4 prefix: request addresses
+// are compared unmapped, so it must match IPv4 peers and hops.
+func TestTrustedProxiesIPv4MappedPrefix(t *testing.T) {
+	for list, want := range map[string]string{
+		"::ffff:10.0.0.0/104":     "10.0.0.0/8",
+		"::ffff:198.51.100.1/128": "198.51.100.1/32",
+		"::ffff:0:0/96":           "0.0.0.0/0",
+		"::ffff:10.1.2.3/104":     "10.0.0.0/8",
+	} {
+		tp := mustTrustedProxies(t, list, ProxyHeaderXForwardedFor)
+		if len(tp.prefixes) != 1 || tp.prefixes[0].String() != want {
+			t.Errorf("%s: got %v, want %s", list, tp.prefixes, want)
+		}
+	}
+	if _, err := ParseTrustedProxies("::ffff:10.0.0.0/80", ProxyHeaderXForwardedFor); err == nil {
+		t.Error("::ffff:10.0.0.0/80: expected an error")
+	}
+
+	withTrustedProxies(t, mustTrustedProxies(t, "::ffff:10.0.0.0/104", ProxyHeaderXForwardedFor))
+	h := http.Header{xForwardedFor: {"192.0.2.1"}}
+	for _, peer := range []string{"10.0.0.5:5000", "[::ffff:10.0.0.5]:5000"} {
+		if got := GetSourceIPRaw(&http.Request{RemoteAddr: peer, Header: h}); got != "192.0.2.1" {
+			t.Errorf("peer %s: got %q, want the trusted proxy's client 192.0.2.1", peer, got)
+		}
+	}
+}
+
 func TestParseTrustedProxies(t *testing.T) {
 	tp := mustTrustedProxies(t, " 10.0.0.0/8, 192.0.2.7 ,2001:db8::/32,,::ffff:198.51.100.1, 10.1.2.3/8", "x-real-ip")
 	want := []string{"10.0.0.0/8", "192.0.2.7/32", "2001:db8::/32", "198.51.100.1/32", "10.0.0.0/8"}
