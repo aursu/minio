@@ -42,7 +42,7 @@ func clientOf(t *testing.T, cfg Config, peer string) string {
 	t.Helper()
 	handlers.SetTrustedProxies(cfg.TrustedProxies)
 	t.Cleanup(func() {
-		tp, _ := handlers.ParseTrustedProxies(handlers.DefaultTrustedProxies, handlers.ProxyHeaderXForwardedFor)
+		tp, _ := handlers.ParseTrustedProxies("", handlers.ProxyHeaderXForwardedFor)
 		handlers.SetTrustedProxies(tp)
 	})
 	r := &http.Request{RemoteAddr: peer + ":5000", Header: http.Header{"X-Forwarded-For": {"192.0.2.1"}}}
@@ -50,16 +50,17 @@ func clientOf(t *testing.T, cfg Config, peer string) string {
 }
 
 func TestLookupConfigTrustedProxies(t *testing.T) {
-	t.Run("default trusts loopback", func(t *testing.T) {
+	t.Run("default lists no proxy", func(t *testing.T) {
 		cfg, err := LookupConfig(apiKVS(nil))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := clientOf(t, cfg, "127.0.0.1"); got != "192.0.2.1" {
-			t.Errorf("loopback peer: got %s", got)
-		}
 		if got := clientOf(t, cfg, "10.0.0.1"); got != "10.0.0.1" {
 			t.Errorf("other peer: got %s", got)
+		}
+		// Loopback is trusted whatever the list says.
+		if got := clientOf(t, cfg, "127.0.0.1"); got != "192.0.2.1" {
+			t.Errorf("loopback peer: got %s", got)
 		}
 	})
 
@@ -71,37 +72,41 @@ func TestLookupConfigTrustedProxies(t *testing.T) {
 		if got := clientOf(t, cfg, "10.0.0.1"); got != "192.0.2.1" {
 			t.Errorf("listed peer: got %s", got)
 		}
-		if got := clientOf(t, cfg, "127.0.0.1"); got != "127.0.0.1" {
-			t.Errorf("loopback no longer listed: got %s", got)
+		if got := clientOf(t, cfg, "127.0.0.1"); got != "192.0.2.1" {
+			t.Errorf("loopback peer, not listed: got %s", got)
+		}
+		if got := clientOf(t, cfg, "192.0.2.99"); got != "192.0.2.99" {
+			t.Errorf("other peer: got %s", got)
 		}
 	})
 
-	t.Run("empty list trusts no proxy", func(t *testing.T) {
+	t.Run("empty list lists no proxy", func(t *testing.T) {
 		cfg, err := LookupConfig(apiKVS(map[string]string{apiTrustedProxies: ""}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := clientOf(t, cfg, "127.0.0.1"); got != "127.0.0.1" {
+		if got := clientOf(t, cfg, "10.0.0.1"); got != "10.0.0.1" {
 			t.Errorf("got %s", got)
 		}
 	})
 
 	// An empty environment variable counts as unset, so "none" is the way
-	// to trust no proxy from the environment.
-	t.Run("environment none trusts no proxy", func(t *testing.T) {
+	// to override a stored list from the environment.
+	t.Run("environment none lists no proxy", func(t *testing.T) {
+		stored := map[string]string{apiTrustedProxies: "10.0.0.0/8"}
 		t.Setenv(EnvAPITrustedProxies, "")
-		cfg, err := LookupConfig(apiKVS(nil))
+		cfg, err := LookupConfig(apiKVS(stored))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := clientOf(t, cfg, "127.0.0.1"); got != "192.0.2.1" {
-			t.Errorf("empty variable: got %s, want the default list applied", got)
+		if got := clientOf(t, cfg, "10.0.0.1"); got != "192.0.2.1" {
+			t.Errorf("empty variable: got %s, want the stored list applied", got)
 		}
 		t.Setenv(EnvAPITrustedProxies, "none")
-		if cfg, err = LookupConfig(apiKVS(nil)); err != nil {
+		if cfg, err = LookupConfig(apiKVS(stored)); err != nil {
 			t.Fatal(err)
 		}
-		if got := clientOf(t, cfg, "127.0.0.1"); got != "127.0.0.1" {
+		if got := clientOf(t, cfg, "10.0.0.1"); got != "10.0.0.1" {
 			t.Errorf("none: got %s", got)
 		}
 	})
@@ -119,16 +124,18 @@ func TestLookupConfigTrustedProxies(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid values fail and trust no proxy", func(t *testing.T) {
+	t.Run("invalid values fail and list no proxy", func(t *testing.T) {
 		for k, v := range map[string]string{
 			apiTrustedProxies:     "proxy.example.com",
 			apiTrustedProxyHeader: "x-client-ip",
 		} {
-			cfg, err := LookupConfig(apiKVS(map[string]string{k: v}))
+			kvs := apiKVS(map[string]string{apiTrustedProxies: "10.0.0.0/8"})
+			kvs.Set(k, v)
+			cfg, err := LookupConfig(kvs)
 			if err == nil {
 				t.Errorf("%s=%s: expected an error", k, v)
 			}
-			if got := clientOf(t, cfg, "127.0.0.1"); got != "127.0.0.1" {
+			if got := clientOf(t, cfg, "10.0.0.1"); got != "10.0.0.1" {
 				t.Errorf("%s=%s: got %s", k, v, got)
 			}
 		}

@@ -169,7 +169,7 @@ var (
 		},
 		config.KV{
 			Key:   apiTrustedProxies,
-			Value: handlers.DefaultTrustedProxies,
+			Value: "",
 		},
 		config.KV{
 			Key:   apiTrustedProxyHeader,
