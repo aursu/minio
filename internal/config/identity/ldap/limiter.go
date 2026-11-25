@@ -18,25 +18,42 @@
 package ldap
 
 import (
+	"fmt"
 	"net/netip"
 	"sync"
 	"time"
 )
 
-// LoginLimits are the limits on password guessing for one account from
-// one client address (CVE-2026-33419).
+// LoginLimits are the limits on password guessing (CVE-2026-33419).
 type LoginLimits struct {
-	// Backoff is the wait after the first failure before the next try.
+	// Backoff is the wait after the first failure of an account at an
+	// address before the next try.
 	Backoff time.Duration
 	// BackoffFactor multiplies the wait after every further failure; 1
 	// keeps it at Backoff.
 	BackoffFactor float64
 	// MaxFailures is the number of failures in a row that locks the
-	// account out for the address; 0 turns the limits off.
+	// account out for the address; 0 turns this limit off.
 	MaxFailures int
-	// Lockout is how long a lockout lasts. Failures are also forgotten
-	// once Lockout has passed after the last wait ended.
+	// Lockout is how long such a lockout lasts. Failures are also
+	// forgotten once Lockout has passed after the last wait ended.
 	Lockout time.Duration
+
+	// MaxAccountsPerAddress is the number of different accounts that may
+	// fail from one address within AddressLockout before the address is
+	// locked out for every account (password spraying); 0 turns this
+	// limit off.
+	MaxAccountsPerAddress int
+	// AddressLockout is how long an address lockout lasts, and how long a
+	// failed account counts against its address.
+	AddressLockout time.Duration
+
+	// MaxFailuresPerAccount is the number of failures of one account, from
+	// any addresses, within AccountWindow that locks the account out for
+	// every address for AccountWindow (many addresses guessing one
+	// password); 0 turns this limit off.
+	MaxFailuresPerAccount int
+	AccountWindow         time.Duration
 }
 
 // loginKey is one account, by its normalized DN, at one client address.
@@ -50,6 +67,16 @@ type loginState struct {
 	next     time.Time // no attempt before this
 }
 
+type addressState struct {
+	failed      map[string]time.Time // account: its last failure
+	lockedUntil time.Time
+}
+
+type accountState struct {
+	failures    []time.Time // within AccountWindow, oldest first
+	lockedUntil time.Time
+}
+
 // loginLimiter enforces LoginLimits. It is safe for concurrent use. Its
 // state is in memory and per server: a restart, or a change of the LDAP
 // configuration, forgets it.
@@ -59,6 +86,8 @@ type loginLimiter struct {
 
 	mu        sync.Mutex
 	state     map[loginKey]*loginState
+	addresses map[string]*addressState
+	accounts  map[string]*accountState
 	nextSweep int
 }
 
@@ -69,6 +98,8 @@ func newLoginLimiter(limits LoginLimits) *loginLimiter {
 		limits:    limits,
 		now:       time.Now,
 		state:     make(map[loginKey]*loginState),
+		addresses: make(map[string]*addressState),
+		accounts:  make(map[string]*accountState),
 		nextSweep: minSweep,
 	}
 }
@@ -87,10 +118,10 @@ func (l *loginLimiter) key(account, addr string) loginKey {
 	return loginKey{account: account, addr: addr}
 }
 
-// enabled reports whether the limits apply at all.
-func (l *loginLimiter) enabled() bool {
-	return l != nil && l.limits.MaxFailures > 0
-}
+func (l *loginLimiter) pairLimit() bool    { return l != nil && l.limits.MaxFailures > 0 }
+func (l *loginLimiter) addressLimit() bool { return l != nil && l.limits.MaxAccountsPerAddress > 0 }
+func (l *loginLimiter) accountLimit() bool { return l != nil && l.limits.MaxFailuresPerAccount > 0 }
+func (l *loginLimiter) anyLimit() bool     { return l.pairLimit() || l.addressLimit() || l.accountLimit() }
 
 // attempt asks whether account may try a password from addr now. If so,
 // the wait that would follow a failure is reserved at once, so that
@@ -98,7 +129,7 @@ func (l *loginLimiter) enabled() bool {
 // before the first failure is counted. Otherwise it returns how long to
 // wait.
 func (l *loginLimiter) attempt(account, addr string) (ok bool, wait time.Duration) {
-	if !l.enabled() {
+	if !l.anyLimit() {
 		return true, 0
 	}
 	k := l.key(account, addr)
@@ -106,6 +137,15 @@ func (l *loginLimiter) attempt(account, addr string) (ok bool, wait time.Duratio
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if as := l.addresses[k.addr]; as != nil && now.Before(as.lockedUntil) {
+		return false, as.lockedUntil.Sub(now)
+	}
+	if ac := l.accounts[account]; ac != nil && now.Before(ac.lockedUntil) {
+		return false, ac.lockedUntil.Sub(now)
+	}
+	if !l.pairLimit() {
+		return true, 0
+	}
 	st := l.state[k]
 	if st != nil && l.expired(st, now) {
 		st = nil
@@ -124,41 +164,91 @@ func (l *loginLimiter) attempt(account, addr string) (ok bool, wait time.Duratio
 	return true, 0
 }
 
-// failed records a failed attempt. It returns true when the failure
-// started a lockout.
-func (l *loginLimiter) failed(account, addr string) (lockedOut bool) {
-	if !l.enabled() {
-		return false
+// failed records a failed attempt. When the failure starts a lockout, it
+// returns a description of it, for the server log.
+func (l *loginLimiter) failed(account, addr string) (lockout string) {
+	if !l.anyLimit() {
+		return ""
 	}
 	k := l.key(account, addr)
 	now := l.now()
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	st := l.state[k]
-	if st == nil {
-		st = &loginState{}
-		l.state[k] = st
+	if l.pairLimit() {
+		st := l.state[k]
+		if st == nil {
+			st = &loginState{}
+			l.state[k] = st
+		}
+		st.failures++
+		if st.failures >= l.limits.MaxFailures {
+			st.failures = 0
+			st.next = now.Add(l.limits.Lockout)
+			lockout = fmt.Sprintf("%s from %s locked out for %v after %d failures",
+				account, k.addr, l.limits.Lockout, l.limits.MaxFailures)
+		} else {
+			st.next = now.Add(l.waitAfter(st.failures))
+		}
 	}
-	st.failures++
-	if st.failures >= l.limits.MaxFailures {
-		st.failures = 0
-		st.next = now.Add(l.limits.Lockout)
-		return true
+	if l.addressLimit() {
+		as := l.addresses[k.addr]
+		if as == nil {
+			l.sweepLocked(now) // before the new, still empty state is in the map
+			as = &addressState{failed: make(map[string]time.Time)}
+			l.addresses[k.addr] = as
+		}
+		l.forgetOldFailures(as, now)
+		as.failed[account] = now
+		if len(as.failed) >= l.limits.MaxAccountsPerAddress {
+			as.lockedUntil = now.Add(l.limits.AddressLockout)
+			clear(as.failed)
+			if lockout != "" {
+				lockout += "; "
+			}
+			lockout += fmt.Sprintf("address %s locked out for %v after failures on %d accounts",
+				k.addr, l.limits.AddressLockout, l.limits.MaxAccountsPerAddress)
+		}
 	}
-	st.next = now.Add(l.waitAfter(st.failures))
-	return false
+	if l.accountLimit() {
+		ac := l.accounts[account]
+		if ac == nil {
+			l.sweepLocked(now) // before the new, still empty state is in the map
+			ac = &accountState{}
+			l.accounts[account] = ac
+		}
+		l.forgetOldAccountFailures(ac, now)
+		ac.failures = append(ac.failures, now)
+		if len(ac.failures) >= l.limits.MaxFailuresPerAccount {
+			ac.lockedUntil = now.Add(l.limits.AccountWindow)
+			ac.failures = nil
+			if lockout != "" {
+				lockout += "; "
+			}
+			lockout += fmt.Sprintf("%s locked out from every address for %v after %d failures within %v",
+				account, l.limits.AccountWindow, l.limits.MaxFailuresPerAccount, l.limits.AccountWindow)
+		}
+	}
+	return lockout
 }
 
-// succeeded forgets the failures of account at addr.
+// succeeded forgets the failures of account at addr. The account no longer
+// counts against the address either; the other accounts that failed there
+// still do, so that a guesser cannot clear them with an account of its own.
+// The failures of the account from other addresses still count too: a
+// success of the owner during an attack would otherwise give the attackers
+// a fresh count.
 func (l *loginLimiter) succeeded(account, addr string) {
-	if !l.enabled() {
+	if !l.anyLimit() {
 		return
 	}
 	k := l.key(account, addr)
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	delete(l.state, k)
-	l.mu.Unlock()
+	if as := l.addresses[k.addr]; as != nil {
+		delete(as.failed, account)
+	}
 }
 
 // waitAfter returns the wait after failure number n of a row: Backoff,
@@ -181,11 +271,33 @@ func (l *loginLimiter) expired(st *loginState, now time.Time) bool {
 	return !now.Before(st.next.Add(l.limits.Lockout))
 }
 
-// sweepLocked drops expired states once the map has doubled since the
+// forgetOldFailures drops the accounts that failed at an address longer
+// than AddressLockout ago.
+func (l *loginLimiter) forgetOldFailures(as *addressState, now time.Time) {
+	for account, at := range as.failed {
+		if !now.Before(at.Add(l.limits.AddressLockout)) {
+			delete(as.failed, account)
+		}
+	}
+}
+
+// forgetOldAccountFailures drops the failures of an account older than
+// AccountWindow.
+func (l *loginLimiter) forgetOldAccountFailures(ac *accountState, now time.Time) {
+	i := 0
+	for i < len(ac.failures) && !now.Before(ac.failures[i].Add(l.limits.AccountWindow)) {
+		i++
+	}
+	ac.failures = ac.failures[i:]
+}
+
+func (l *loginLimiter) size() int { return len(l.state) + len(l.addresses) + len(l.accounts) }
+
+// sweepLocked drops expired states once the maps have doubled since the
 // last sweep, so that memory follows the number of live states. It is
 // called before a new state is added.
 func (l *loginLimiter) sweepLocked(now time.Time) {
-	if len(l.state) < l.nextSweep {
+	if l.size() < l.nextSweep {
 		return
 	}
 	for k, st := range l.state {
@@ -193,5 +305,17 @@ func (l *loginLimiter) sweepLocked(now time.Time) {
 			delete(l.state, k)
 		}
 	}
-	l.nextSweep = max(minSweep, 2*len(l.state))
+	for addr, as := range l.addresses {
+		l.forgetOldFailures(as, now)
+		if len(as.failed) == 0 && !now.Before(as.lockedUntil) {
+			delete(l.addresses, addr)
+		}
+	}
+	for account, ac := range l.accounts {
+		l.forgetOldAccountFailures(ac, now)
+		if len(ac.failures) == 0 && !now.Before(ac.lockedUntil) {
+			delete(l.accounts, account)
+		}
+	}
+	l.nextSweep = max(minSweep, 2*l.size())
 }

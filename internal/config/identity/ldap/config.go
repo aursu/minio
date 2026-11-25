@@ -94,6 +94,11 @@ const (
 	LoginMaxFailures   = "login_max_failures"
 	LoginLockout       = "login_lockout"
 
+	LoginMaxAccountsPerAddress = "login_max_accounts_per_address"
+	LoginAddressLockout        = "login_address_lockout"
+	LoginMaxFailuresPerAccount = "login_max_failures_per_account"
+	LoginAccountWindow         = "login_account_window"
+
 	EnvServerAddr         = "MINIO_IDENTITY_LDAP_SERVER_ADDR"
 	EnvSRVRecordName      = "MINIO_IDENTITY_LDAP_SRV_RECORD_NAME"
 	EnvTLSSkipVerify      = "MINIO_IDENTITY_LDAP_TLS_SKIP_VERIFY"
@@ -190,6 +195,22 @@ var (
 		},
 		config.KV{
 			Key:   LoginLockout,
+			Value: "15m",
+		},
+		config.KV{
+			Key:   LoginMaxAccountsPerAddress,
+			Value: "10",
+		},
+		config.KV{
+			Key:   LoginAddressLockout,
+			Value: "15m",
+		},
+		config.KV{
+			Key:   LoginMaxFailuresPerAccount,
+			Value: "100",
+		},
+		config.KV{
+			Key:   LoginAccountWindow,
 			Value: "15m",
 		},
 	}
@@ -403,8 +424,27 @@ func (l *Config) lookupLoginLimits(getCfgVal func(string) string) error {
 		limits.BackoffFactor < 1 || math.IsInf(limits.BackoffFactor, 0) {
 		return fmt.Errorf("invalid %s %q: expecting a number of 1 or more", LoginBackoffFactor, value(LoginBackoffFactor))
 	}
-	if limits.MaxFailures, err = strconv.Atoi(value(LoginMaxFailures)); err != nil || limits.MaxFailures < 0 {
-		return fmt.Errorf("invalid %s %q: expecting a whole number of 0 (no limits) or more", LoginMaxFailures, value(LoginMaxFailures))
+	count := func(key string) (int, error) {
+		n, err := strconv.Atoi(value(key))
+		if err != nil || n < 0 {
+			return 0, fmt.Errorf("invalid %s %q: expecting a whole number of 0 (no limit) or more", key, value(key))
+		}
+		return n, nil
+	}
+	if limits.MaxFailures, err = count(LoginMaxFailures); err != nil {
+		return err
+	}
+	if limits.MaxAccountsPerAddress, err = count(LoginMaxAccountsPerAddress); err != nil {
+		return err
+	}
+	if limits.AddressLockout, err = duration(LoginAddressLockout); err != nil {
+		return err
+	}
+	if limits.MaxFailuresPerAccount, err = count(LoginMaxFailuresPerAccount); err != nil {
+		return err
+	}
+	if limits.AccountWindow, err = duration(LoginAccountWindow); err != nil {
+		return err
 	}
 	l.limiter = newLoginLimiter(limits)
 	return nil

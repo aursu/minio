@@ -51,6 +51,10 @@ MINIO_IDENTITY_LDAP_LOGIN_BACKOFF           (duration)  wait after a failed logi
 MINIO_IDENTITY_LDAP_LOGIN_BACKOFF_FACTOR    (number)    factor the wait grows by after every further failure in a row; 1 keeps it at login_backoff (default: '2')
 MINIO_IDENTITY_LDAP_LOGIN_MAX_FAILURES      (number)    failed logins in a row that lock the account out for that client address; 0 turns the login limits off (default: '10')
 MINIO_IDENTITY_LDAP_LOGIN_LOCKOUT           (duration)  how long a lockout lasts; failures are also forgotten this long after the last wait ended (default: '15m')
+MINIO_IDENTITY_LDAP_LOGIN_MAX_ACCOUNTS_PER_ADDRESS (number) different accounts that may fail from one client address within login_address_lockout before the address is locked out for every account; 0 turns this limit off (default: '10')
+MINIO_IDENTITY_LDAP_LOGIN_ADDRESS_LOCKOUT   (duration)  how long an address lockout lasts, and how long a failed account counts against its address (default: '15m')
+MINIO_IDENTITY_LDAP_LOGIN_MAX_FAILURES_PER_ACCOUNT (number) failed logins of one account, from any client addresses, within login_account_window that lock the account out for every address for login_account_window; 0 turns this limit off (default: '100')
+MINIO_IDENTITY_LDAP_LOGIN_ACCOUNT_WINDOW    (duration)  the window login_max_failures_per_account counts in, and how long the account lockout lasts (default: '15m')
 MINIO_IDENTITY_LDAP_COMMENT                 (sentence)  optionally add a comment to this setting
 ```
 
@@ -271,6 +275,8 @@ XML error response for this API is similar to [AWS STS AssumeRoleWithWebIdentity
 Password guessing is limited per account and client address. After a failed login, the same account may try again from the same address only after `login_backoff`; the wait grows by `login_backoff_factor` with every further failure in a row (1 s, 2 s, 4 s … by default), and `login_max_failures` failures in a row lock the account out for that address for `login_lockout`. A success clears the count. A login refused by the limits gets the same answer as a wrong password, so a lockout does not tell which users exist either; the start of each lockout is written to the server log as a warning.
 
 - The client address is the connection peer, or, behind a proxy listed in `api trusted_proxies`, the address that proxy reports. IPv6 addresses count per /64. For SFTP and FTP it is the peer of the connection.
+- One address that fails on `login_max_accounts_per_address` different accounts within `login_address_lockout` is locked out for every account for `login_address_lockout`. This stops trying one password on many users (password spraying). Many users behind one NAT address share this limit; raise it, or set it to 0, if that is a problem. A success takes only its own account off the address.
+- One account that fails `login_max_failures_per_account` times within `login_account_window`, from any addresses, is locked out for every address for `login_account_window`. This stops many addresses guessing one password together. It is the one limit that also locks out the owner: guessers with enough addresses can keep an account locked. A success does not clear this count, so that the owner logging in during an attack does not give the guessers a fresh count.
 - Only known accounts are counted; an unknown user has no password to guess.
 - Anyone who knows a user name can lock that user out for their own address only; other addresses are not affected.
 - The limits are kept in memory on each server: a restart or a change of the LDAP configuration forgets them, and each server of a cluster counts on its own.
