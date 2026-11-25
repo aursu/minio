@@ -73,6 +73,13 @@ client address.
      returns before it and leaves no proxy trusted. The config is merged with the defaults before
      the lookup, so a key that was never set has its default, and an
      empty value means what it says.
+     **Correction (2026-11-25, CI of #58):** the #58 test expected
+     `requests_max` to keep its config value, but `make test` sets
+     `MINIO_API_REQUESTS_MAX=10000`, and the environment overrides the
+     config. The targeted run on media-gw did not set it, so the test
+     passed there and failed in CI; #58 was merged with that job red,
+     and `master` failed it too. The test now clears the api variables
+     it reads (PR #60).
    - `_MINIO_API_XFF_HEADER` is removed, and `docs/config/README.md`
      documents the keys and the proxy setup.
 2. **`fix(handlers)`: the forwarder sets `X-Real-IP`, never passes on

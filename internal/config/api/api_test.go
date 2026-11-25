@@ -141,6 +141,14 @@ func TestLookupConfigTrustedProxies(t *testing.T) {
 // would open to "*", the remote transport would lose its deadline, and
 // requests_max and sync_events would fall back to their defaults.
 func TestLookupConfigInvalidTrustedProxiesKeepsOthers(t *testing.T) {
+	// The environment overrides the config, and make test sets
+	// MINIO_API_REQUESTS_MAX. An empty variable counts as unset.
+	for _, env := range []string{
+		EnvAPICorsAllowOrigin, EnvAPIRequestsMax, EnvAPIRemoteTransportDeadline,
+		EnvAPISyncEvents, EnvAPIObjectMaxVersions,
+	} {
+		t.Setenv(env, "")
+	}
 	others := map[string]string{
 		apiCorsAllowOrigin:         "https://console.example.com",
 		apiRequestsMax:             "100",
