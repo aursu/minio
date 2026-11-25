@@ -37,6 +37,20 @@ func apiKVS(set map[string]string) config.KVS {
 	return kvs
 }
 
+// clearAPIEnv unsets, for one test, the environment variables of the api
+// keys these tests read: the environment overrides the config, and make
+// test sets MINIO_API_REQUESTS_MAX. An empty variable counts as unset.
+func clearAPIEnv(t *testing.T) {
+	t.Helper()
+	for _, env := range []string{
+		EnvAPICorsAllowOrigin, EnvAPIRequestsMax, EnvAPIRemoteTransportDeadline,
+		EnvAPISyncEvents, EnvAPIObjectMaxVersions, EnvAPIObjectMaxVersionsLegacy,
+		EnvAPITrustedProxies, EnvAPITrustedProxyHeader,
+	} {
+		t.Setenv(env, "")
+	}
+}
+
 // clientOf returns the client address cfg finds for a request from peer
 // with X-Forwarded-For: 192.0.2.1.
 func clientOf(t *testing.T, cfg Config, peer string) string {
@@ -51,6 +65,7 @@ func clientOf(t *testing.T, cfg Config, peer string) string {
 }
 
 func TestLookupConfigTrustedProxies(t *testing.T) {
+	clearAPIEnv(t)
 	t.Run("default lists no proxy", func(t *testing.T) {
 		cfg, err := LookupConfig(apiKVS(nil))
 		if err != nil {
@@ -148,15 +163,9 @@ func TestLookupConfigTrustedProxies(t *testing.T) {
 // would open to "*", the remote transport would lose its deadline, and
 // requests_max and sync_events would fall back to their defaults.
 func TestLookupConfigInvalidTrustedProxiesKeepsOthers(t *testing.T) {
-	// The environment overrides the config, and make test sets
-	// MINIO_API_REQUESTS_MAX. An empty variable counts as unset.
-	for _, env := range []string{
-		EnvAPICorsAllowOrigin, EnvAPIRequestsMax, EnvAPIRemoteTransportDeadline,
-		EnvAPISyncEvents, EnvAPIObjectMaxVersions,
-	} {
-		t.Setenv(env, "")
-	}
+	clearAPIEnv(t)
 	others := map[string]string{
+		apiTrustedProxies:          "10.0.0.0/8",
 		apiCorsAllowOrigin:         "https://console.example.com",
 		apiRequestsMax:             "100",
 		apiRemoteTransportDeadline: "30m",
@@ -174,8 +183,8 @@ func TestLookupConfigInvalidTrustedProxiesKeepsOthers(t *testing.T) {
 			t.Errorf("other keys lost: cors %v, requests_max %d, remote_transport_deadline %v, sync_events %v, object_max_versions %d",
 				cfg.CorsAllowOrigin, cfg.RequestsMax, cfg.RemoteTransportDeadline, cfg.SyncEvents, cfg.ObjectMaxVersions)
 		}
-		if got := clientOf(t, cfg, "127.0.0.1"); got != "127.0.0.1" {
-			t.Errorf("an invalid setting trusts a proxy: got %s", got)
+		if got := clientOf(t, cfg, "10.0.0.1"); got != "10.0.0.1" {
+			t.Errorf("an invalid setting trusts the listed proxies: got %s", got)
 		}
 	}
 
@@ -200,13 +209,14 @@ func TestLookupConfigInvalidTrustedProxiesKeepsOthers(t *testing.T) {
 }
 
 // A failure in another api key returns before the trusted proxies are
-// parsed: the applied config then trusts no proxy.
+// parsed: the applied config then trusts none of the listed proxies.
 func TestLookupConfigEarlierErrorTrustsNoProxy(t *testing.T) {
-	cfg, err := LookupConfig(apiKVS(map[string]string{apiListQuorum: "bogus"}))
+	clearAPIEnv(t)
+	cfg, err := LookupConfig(apiKVS(map[string]string{apiTrustedProxies: "10.0.0.0/8", apiListQuorum: "bogus"}))
 	if err == nil {
 		t.Fatal("expected an error")
 	}
-	if got := clientOf(t, cfg, "127.0.0.1"); got != "127.0.0.1" {
+	if got := clientOf(t, cfg, "10.0.0.1"); got != "10.0.0.1" {
 		t.Errorf("got %s", got)
 	}
 }
