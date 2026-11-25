@@ -182,7 +182,7 @@ The client address is used by the `aws:SourceIp` policy condition, the audit log
 - The proxy must append the address of its peer to `X-Forwarded-For` (nginx: `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`), set `X-Real-IP` to it (nginx: `proxy_set_header X-Real-IP $remote_addr;`), or append an element with `for=` to `Forwarded` (RFC 7239; HAProxy: `option forwarded`). Only the `for` parameter of `Forwarded` is used; an element without it stops the walk.
 - Loopback and the nodes of this deployment are always trusted, in addition to the list:
   - The SFTP and FTP servers call the S3 API over loopback and pass the address of their own client in all three headers. The embedded console passes it in `X-Forwarded-For` only.
-  - A node forwards some requests to another node, for example a listing continued with a token that node issued. The names of the nodes are resolved at startup and again every minute.
+  - A node forwards some admin requests to another node: pool status and decommission, heal status, batch job cancel. The names of the nodes are resolved at startup and again every minute.
 - A federated deployment or a site replication peer that forwards requests to this one is a proxy as well, and must be listed.
 
 #### Notifications
