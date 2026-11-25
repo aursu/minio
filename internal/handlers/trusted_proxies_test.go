@@ -405,3 +405,47 @@ func TestSetForwardingHeaders(t *testing.T) {
 		}
 	}
 }
+
+func TestGetSourceScheme(t *testing.T) {
+	xff := mustTrustedProxies(t, "10.0.0.0/8", ProxyHeaderXForwardedFor)
+	realIP := mustTrustedProxies(t, "10.0.0.0/8", ProxyHeaderXRealIP)
+	fwd := mustTrustedProxies(t, "10.0.0.0/8", ProxyHeaderForwarded)
+	const trusted, untrusted = "10.0.0.1:5000", "192.0.2.99:5000"
+
+	for _, tt := range []struct {
+		name    string
+		proxies TrustedProxies
+		peer    string
+		header  http.Header
+		want    string
+	}{
+		{"untrusted peer", xff, untrusted, http.Header{xForwardedProto: {"https"}}, ""},
+		{"untrusted peer, Forwarded", fwd, untrusted, http.Header{forwarded: {"for=192.0.2.1;proto=https"}}, ""},
+		{"X-Forwarded-Proto", xff, trusted, http.Header{xForwardedProto: {"https"}}, "https"},
+		{"case", xff, trusted, http.Header{xForwardedProto: {"HTTP"}}, "http"},
+		{"not a scheme", xff, trusted, http.Header{xForwardedProto: {"javascript"}}, ""},
+		{"last value of a list", xff, trusted, http.Header{xForwardedProto: {"javascript, https"}}, "https"},
+		{"last of several fields", xff, trusted, http.Header{xForwardedProto: {"javascript", " https "}}, "https"},
+		{"X-Forwarded-Scheme", xff, trusted, http.Header{xForwardedScheme: {"https"}}, "https"},
+		{"X-Forwarded-Proto first", xff, trusted, http.Header{xForwardedProto: {"http"}, xForwardedScheme: {"https"}}, "http"},
+		{"nothing reported", xff, trusted, http.Header{}, ""},
+		{"Forwarded not chosen", xff, trusted, http.Header{forwarded: {"for=192.0.2.1;proto=https"}}, ""},
+		{"X-Real-IP proxies use X-Forwarded-Proto", realIP, trusted, http.Header{xForwardedProto: {"https"}}, "https"},
+		{"Forwarded proto", fwd, trusted, http.Header{forwarded: {"for=192.0.2.1;proto=https"}}, "https"},
+		{"Forwarded, element of the client", fwd, trusted, http.Header{forwarded: {"for=192.0.2.1;proto=https, for=10.0.0.5;proto=http"}}, "https"},
+		{"Forwarded, client's own element ignored", fwd, trusted, http.Header{forwarded: {"for=1.1.1.1;proto=https, for=192.0.2.1;proto=http"}}, "http"},
+		{"Forwarded, quoted", fwd, trusted, http.Header{forwarded: {`for="192.0.2.1";proto="HTTPS"`}}, "https"},
+		{"Forwarded, proto twice", fwd, trusted, http.Header{forwarded: {"for=192.0.2.1;proto=https;proto=http"}}, ""},
+		{"Forwarded, no proto", fwd, trusted, http.Header{forwarded: {"for=192.0.2.1"}}, ""},
+		{"Forwarded, walk stopped at the peer", fwd, trusted, http.Header{forwarded: {"for=unknown;proto=https"}}, ""},
+		{"Forwarded, X-Forwarded-Proto not chosen", fwd, trusted, http.Header{xForwardedProto: {"https"}}, ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			withTrustedProxies(t, tt.proxies)
+			r := &http.Request{RemoteAddr: tt.peer, Header: tt.header}
+			if got := GetSourceScheme(r); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

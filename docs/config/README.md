@@ -184,6 +184,7 @@ The client address is used by the `aws:SourceIp` policy condition, the audit log
   - The SFTP and FTP servers call the S3 API over loopback and pass the address of their own client in all three headers. The embedded console passes it in `X-Forwarded-For` only.
   - A node forwards some admin requests to another node: pool status and decommission, heal status, batch job cancel. The names of the nodes are resolved at startup and again every minute.
 - A federated deployment or a site replication peer that forwards requests to this one is a proxy as well, and must be listed.
+- The scheme the client used, which sets the scheme of `Location` URLs in responses, is taken from a trusted proxy only. With `forwarded` it is the `proto` parameter of the element the client address was found in; otherwise the last value of `X-Forwarded-Proto` (or `X-Forwarded-Scheme`). Only `http` and `https` are accepted.
 
 #### Notifications
 

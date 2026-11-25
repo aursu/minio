@@ -37,7 +37,8 @@ func TestObjectLocation(t *testing.T) {
 		// Server binding to localhost IP with https.
 		{
 			request: &http.Request{
-				Host: "127.0.0.1:9000",
+				RemoteAddr: "127.0.0.1:50000", // loopback, always trusted
+				Host:       "127.0.0.1:9000",
 				Header: map[string][]string{
 					"X-Forwarded-Scheme": {httpScheme},
 				},
@@ -48,7 +49,8 @@ func TestObjectLocation(t *testing.T) {
 		},
 		{
 			request: &http.Request{
-				Host: "127.0.0.1:9000",
+				RemoteAddr: "127.0.0.1:50000", // loopback, always trusted
+				Host:       "127.0.0.1:9000",
 				Header: map[string][]string{
 					"X-Forwarded-Scheme": {httpsScheme},
 				},
@@ -60,7 +62,8 @@ func TestObjectLocation(t *testing.T) {
 		// Server binding to fqdn.
 		{
 			request: &http.Request{
-				Host: "s3.mybucket.org",
+				RemoteAddr: "127.0.0.1:50000", // loopback, always trusted
+				Host:       "s3.mybucket.org",
 				Header: map[string][]string{
 					"X-Forwarded-Scheme": {httpScheme},
 				},
@@ -72,8 +75,9 @@ func TestObjectLocation(t *testing.T) {
 		// Server binding to fqdn.
 		{
 			request: &http.Request{
-				Host:   "mys3.mybucket.org",
-				Header: map[string][]string{},
+				RemoteAddr: "127.0.0.1:50000", // loopback, always trusted
+				Host:       "mys3.mybucket.org",
+				Header:     map[string][]string{},
 			},
 			bucket:           "mybucket",
 			object:           "test/1.txt",
@@ -82,8 +86,9 @@ func TestObjectLocation(t *testing.T) {
 		// Server with virtual domain name.
 		{
 			request: &http.Request{
-				Host:   "mybucket.mys3.bucket.org",
-				Header: map[string][]string{},
+				RemoteAddr: "127.0.0.1:50000", // loopback, always trusted
+				Host:       "mybucket.mys3.bucket.org",
+				Header:     map[string][]string{},
 			},
 			domains:          []string{"mys3.bucket.org"},
 			bucket:           "mybucket",
@@ -92,7 +97,8 @@ func TestObjectLocation(t *testing.T) {
 		},
 		{
 			request: &http.Request{
-				Host: "mybucket.mys3.bucket.org",
+				RemoteAddr: "127.0.0.1:50000", // loopback, always trusted
+				Host:       "mybucket.mys3.bucket.org",
 				Header: map[string][]string{
 					"X-Forwarded-Scheme": {httpsScheme},
 				},
@@ -101,6 +107,19 @@ func TestObjectLocation(t *testing.T) {
 			bucket:           "mybucket",
 			object:           "test/1.txt",
 			expectedLocation: "https://mybucket.mys3.bucket.org/test/1.txt",
+		},
+		// The scheme header of a peer that is not a trusted proxy is ignored.
+		{
+			request: &http.Request{
+				RemoteAddr: "192.0.2.1:50000",
+				Host:       "127.0.0.1:9000",
+				Header: map[string][]string{
+					"X-Forwarded-Scheme": {httpsScheme},
+				},
+			},
+			bucket:           "testbucket1",
+			object:           "test/1.txt",
+			expectedLocation: "http://127.0.0.1:9000/testbucket1/test/1.txt",
 		},
 	}
 	for _, testCase := range testCases {
