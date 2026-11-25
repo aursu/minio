@@ -93,7 +93,7 @@ func TestParseTrustedProxies(t *testing.T) {
 	for _, bad := range []struct{ list, header string }{
 		{"10.0.0.0/33", ProxyHeaderXForwardedFor},
 		{"proxy.example.com", ProxyHeaderXForwardedFor},
-		{"10.0.0.1", "forwarded"},
+		{"10.0.0.1", "x-client-ip"},
 		{"10.0.0.1", "X-Forwarded-For"},
 		{"10.0.0.1", ""},
 	} {
@@ -103,18 +103,21 @@ func TestParseTrustedProxies(t *testing.T) {
 	}
 }
 
+type sourceIPTest struct {
+	name    string
+	proxies TrustedProxies
+	peer    string
+	header  http.Header
+	want    string
+}
+
 func TestGetSourceIP(t *testing.T) {
 	xff := mustTrustedProxies(t, "10.0.0.0/8, 2001:db8::/32", ProxyHeaderXForwardedFor)
 	realIP := mustTrustedProxies(t, "10.0.0.0/8", ProxyHeaderXRealIP)
+	fwd := mustTrustedProxies(t, "10.0.0.0/8, 2001:db8::/32", ProxyHeaderForwarded)
 	none := mustTrustedProxies(t, "", ProxyHeaderXForwardedFor)
 
-	tests := []struct {
-		name    string
-		proxies TrustedProxies
-		peer    string
-		header  http.Header
-		want    string
-	}{
+	tests := []sourceIPTest{
 		{
 			"untrusted peer, header ignored", xff, "198.51.100.1:5000",
 			http.Header{xForwardedFor: {"192.0.2.1"}, xRealIP: {"192.0.2.2"}},
@@ -219,6 +222,38 @@ func TestGetSourceIP(t *testing.T) {
 			"",
 		},
 	}
+	// Forwarded (RFC 7239). The examples are those of the RFC, section 7.
+	for _, tt := range []struct {
+		name, value, want string
+	}{
+		{"for=", "for=192.0.2.43", "192.0.2.43"},
+		{"several elements", "for=192.0.2.43, for=198.51.100.17", "198.51.100.17"},
+		{"chain of trusted proxies", "for=192.0.2.43, for=198.51.100.17;by=10.0.0.2, for=10.0.0.3", "198.51.100.17"},
+		{"other parameters", "for=192.0.2.60;proto=http;by=203.0.113.43", "192.0.2.60"},
+		{"case of the parameter name", "For=192.0.2.60", "192.0.2.60"},
+		{"spaces", " for = 192.0.2.60 ; proto=http", "192.0.2.60"},
+		{"quoted IPv6 with a port", `for="[2001:db8:cafe::17]:4711"`, "2001:db8:cafe::17"},
+		{"quoted IPv4 with a port", `for="192.0.2.43:47011"`, "192.0.2.43"},
+		{"quoted-pair", `for="192.0.2.\43"`, "192.0.2.43"},
+		{"separators inside a quoted-string", `for="198.51.100.17", proto="a,b;for=1.1.1.1"`, "10.0.0.1"},
+		{"comma inside quotes", `for=192.0.2.43, for="[2001:db8::1],x"`, "10.0.0.1"},
+		{"comma inside quotes is not an element", `for=192.0.2.43;ext="a,for=10.0.0.9"`, "192.0.2.43"},
+		{"semicolon inside quotes is not a pair", `for=192.0.2.43;ext="a;for=10.0.0.9"`, "192.0.2.43"},
+		{"escaped quote does not end a quoted-string", `for=192.0.2.43;ext="a\",for=10.0.0.9"`, "192.0.2.43"},
+		{"unknown", "for=192.0.2.43, for=unknown", "10.0.0.1"},
+		{"obfuscated identifier", `for=192.0.2.43, for="_gazonk"`, "10.0.0.1"},
+		{"element without for=", "for=192.0.2.43, proto=https", "10.0.0.1"},
+		{"for= twice in one element", "for=192.0.2.43;for=10.0.0.9", "10.0.0.1"},
+		{"unterminated quote", `for="192.0.2.43`, "10.0.0.1"},
+	} {
+		tests = append(tests, sourceIPTest{"Forwarded, " + tt.name, fwd, "10.0.0.1:5000", http.Header{forwarded: {tt.value}}, tt.want})
+	}
+	tests = append(tests, sourceIPTest{
+		"Forwarded header not chosen", xff, "10.0.0.1:5000",
+		http.Header{forwarded: {"for=192.0.2.43"}},
+		"10.0.0.1",
+	})
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			withTrustedProxies(t, tt.proxies)
@@ -257,6 +292,28 @@ func TestDefaultTrustedProxies(t *testing.T) {
 	} {
 		if got := GetSourceIPRaw(&http.Request{RemoteAddr: peer, Header: h}); got != want {
 			t.Errorf("peer %s: got %q, want %q", peer, got, want)
+		}
+	}
+}
+
+// SetForwardingHeaders must let a loopback client pass its client address
+// whichever header the deployment trusts.
+func TestSetForwardingHeaders(t *testing.T) {
+	for _, header := range []string{ProxyHeaderXForwardedFor, ProxyHeaderXRealIP, ProxyHeaderForwarded} {
+		withTrustedProxies(t, mustTrustedProxies(t, DefaultTrustedProxies, header))
+		for _, addr := range []string{"192.0.2.1", "2001:db8:cafe::17"} {
+			h := http.Header{
+				xForwardedFor: {"1.1.1.1"},
+				xRealIP:       {"1.1.1.1"},
+				forwarded:     {"for=1.1.1.1"},
+			}
+			SetForwardingHeaders(h, addr)
+			if want := map[string]string{"192.0.2.1": "for=192.0.2.1", "2001:db8:cafe::17": `for="[2001:db8:cafe::17]"`}[addr]; h.Get(forwarded) != want {
+				t.Errorf("Forwarded: got %q, want %q (RFC 7239, section 6)", h.Get(forwarded), want)
+			}
+			if got := GetSourceIPRaw(&http.Request{RemoteAddr: "127.0.0.1:5000", Header: h}); got != addr {
+				t.Errorf("%s, %s: got %q", header, addr, got)
+			}
 		}
 	}
 }

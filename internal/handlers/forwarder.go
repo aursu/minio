@@ -174,10 +174,19 @@ func (f *Forwarder) modifyRequest(outReq *http.Request, target *url.URL) {
 type headerRewriter struct{}
 
 func (rw *headerRewriter) Rewrite(req *http.Request) {
-	// httputil.ReverseProxy appends the peer to X-Forwarded-For itself.
-	// X-Real-IP is set to the client as resolved here, never passed on from
-	// the client, so a deployment that trusts this one can use either header.
+	// A deployment that trusts this one may read any of the three headers,
+	// so each is passed on the way a proxy should. httputil.ReverseProxy
+	// appends the peer to X-Forwarded-For itself. X-Real-IP is set to the
+	// client as resolved here, never passed on from the client. Forwarded
+	// gets an element for this hop (RFC 7239, section 4).
 	req.Header.Set(xRealIP, GetSourceIPRaw(req))
+	if peer, ok := parseNode(req.RemoteAddr); ok {
+		scheme := "http"
+		if req.TLS != nil {
+			scheme = "https"
+		}
+		req.Header.Add(forwarded, forwardedForParam(peer.String())+";proto="+scheme)
+	}
 
 	xfProto := req.Header.Get(xForwardedProto)
 	if xfProto == "" {

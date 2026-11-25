@@ -43,11 +43,12 @@ type TrustedProxies struct {
 const (
 	ProxyHeaderXForwardedFor = "x-forwarded-for"
 	ProxyHeaderXRealIP       = "x-real-ip"
+	ProxyHeaderForwarded     = "forwarded" // RFC 7239
 )
 
 // DefaultTrustedProxies trusts loopback only. The embedded console and the
 // SFTP and FTP servers call the S3 API over loopback and pass the address
-// of their own client in X-Forwarded-For.
+// of their own client in a forwarding header.
 const DefaultTrustedProxies = "127.0.0.1/32,::1/128"
 
 // TrustNoProxy is the list that trusts no proxy. An empty list does too,
@@ -64,11 +65,11 @@ func ParseTrustedProxies(list, header string) (TrustedProxies, error) {
 		list = ""
 	}
 	switch header {
-	case ProxyHeaderXForwardedFor, ProxyHeaderXRealIP:
+	case ProxyHeaderXForwardedFor, ProxyHeaderXRealIP, ProxyHeaderForwarded:
 		t.header = http.CanonicalHeaderKey(header)
 	default:
-		return t, fmt.Errorf("unsupported proxy header %q, expecting %q or %q",
-			header, ProxyHeaderXForwardedFor, ProxyHeaderXRealIP)
+		return t, fmt.Errorf("unsupported proxy header %q, expecting %q, %q or %q",
+			header, ProxyHeaderXForwardedFor, ProxyHeaderXRealIP, ProxyHeaderForwarded)
 	}
 	for item := range strings.SplitSeq(list, ",") {
 		item = strings.TrimSpace(item)
@@ -155,16 +156,99 @@ func (t *TrustedProxies) clientAddr(peer string, h http.Header) string {
 func forwardingHops(h http.Header, header string) []string {
 	var hops []string
 	for _, field := range h.Values(header) {
-		if header == xRealIP {
+		switch header {
+		case xRealIP:
 			// One address, replaced rather than appended by each proxy.
 			hops = append(hops[:0], strings.TrimSpace(field))
-			continue
-		}
-		for hop := range strings.SplitSeq(field, ",") {
-			hops = append(hops, strings.TrimSpace(hop))
+		case forwarded:
+			for _, element := range splitUnquoted(field, ',') {
+				hops = append(hops, forwardedFor(element))
+			}
+		default:
+			for hop := range strings.SplitSeq(field, ",") {
+				hops = append(hops, strings.TrimSpace(hop))
+			}
 		}
 	}
 	return hops
+}
+
+// forwardedFor returns the "for" parameter of one element of a Forwarded
+// header (RFC 7239, section 4), unquoted. An element without it, or with it
+// twice, yields "", which is not an address.
+func forwardedFor(element string) string {
+	var addr string
+	found := false
+	for _, pair := range splitUnquoted(element, ';') {
+		name, value, ok := strings.Cut(pair, "=")
+		if !ok || !strings.EqualFold(strings.TrimSpace(name), "for") {
+			continue
+		}
+		if found {
+			return ""
+		}
+		found = true
+		addr = unquote(strings.TrimSpace(value))
+	}
+	return addr
+}
+
+// splitUnquoted splits s at every sep that is not inside a quoted-string.
+func splitUnquoted(s string, sep byte) []string {
+	var parts []string
+	start, quoted, escaped := 0, false, false
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case escaped:
+			escaped = false
+		case quoted && c == '\\':
+			escaped = true
+		case c == '"':
+			quoted = !quoted
+		case !quoted && c == sep:
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+	return append(parts, s[start:])
+}
+
+// unquote returns the content of a quoted-string, or s if it is not one.
+func unquote(s string) string {
+	if len(s) < 2 || s[0] != '"' || s[len(s)-1] != '"' {
+		return s
+	}
+	s = s[1 : len(s)-1]
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			i++ // quoted-pair: the next character stands for itself
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
+
+// SetForwardingHeaders sets every header a trusted proxy may be configured
+// to use to the client address addr, replacing what the request carried.
+// It is for MinIO's own clients of the S3 API on loopback, which must pass
+// on their client whichever header the deployment trusts.
+func SetForwardingHeaders(h http.Header, addr string) {
+	h.Set(xForwardedFor, addr)
+	h.Set(xRealIP, addr)
+	h.Set(forwarded, forwardedForParam(addr))
+}
+
+// forwardedForParam returns the "for" parameter of a Forwarded element for
+// an IP address; IPv6 is bracketed and quoted (RFC 7239, section 6).
+func forwardedForParam(addr string) string {
+	if strings.ContainsRune(addr, ':') {
+		return `for="[` + addr + `]"`
+	}
+	return "for=" + addr
 }
 
 // parseNode parses an address as proxies write it: an IP address, with an

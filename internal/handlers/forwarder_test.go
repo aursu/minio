@@ -24,9 +24,10 @@ import (
 	"testing"
 )
 
-// The forwarder must not pass on a client's own X-Real-IP: a deployment that
-// trusts this one would take it as the client address.
-func TestForwarderSetsRealIP(t *testing.T) {
+// The forwarder must pass on every forwarding header the way a proxy does:
+// a deployment that trusts it may read any of them, and would take what
+// the client wrote as the client address.
+func TestForwarderHeaders(t *testing.T) {
 	withTrustedProxies(t, mustTrustedProxies(t, "", ProxyHeaderXForwardedFor))
 
 	var got http.Header
@@ -44,6 +45,7 @@ func TestForwarderSetsRealIP(t *testing.T) {
 	r.RemoteAddr = "192.0.2.1:5000"
 	r.Header.Set(xRealIP, "1.1.1.1")
 	r.Header.Set(xForwardedFor, "1.1.1.1")
+	r.Header.Set(forwarded, "for=1.1.1.1")
 	r.URL.Scheme, r.URL.Host = target.Scheme, target.Host
 	f.ServeHTTP(httptest.NewRecorder(), r)
 
@@ -52,5 +54,13 @@ func TestForwarderSetsRealIP(t *testing.T) {
 	}
 	if v := got.Get(xForwardedFor); v != "1.1.1.1, 192.0.2.1" {
 		t.Errorf("X-Forwarded-For: got %q, want the peer appended", v)
+	}
+	if v := got.Values(forwarded); len(v) != 2 || v[0] != "for=1.1.1.1" || v[1] != "for=192.0.2.1;proto=http" {
+		t.Errorf("Forwarded: got %q, want an element for the peer appended", v)
+	}
+	// What the receiving side resolves, trusting this forwarder.
+	withTrustedProxies(t, mustTrustedProxies(t, "10.0.0.1", ProxyHeaderForwarded))
+	if a := GetSourceIPRaw(&http.Request{RemoteAddr: "10.0.0.1:9000", Header: got}); a != "192.0.2.1" {
+		t.Errorf("resolved through the forwarder: got %q, want 192.0.2.1", a)
 	}
 }
