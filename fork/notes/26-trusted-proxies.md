@@ -51,7 +51,12 @@ client address.
      trusts no proxy" for the environment variable too. MinIO reads an
      empty environment variable as unset, so `MINIO_API_TRUSTED_PROXIES=`
      kept the loopback default; the live SFTP check of PR 2 showed it.
-     `none` was added for that.
+     `none` was added for that. **Correction (2026-11-25, second review
+     of #51):** a list replaced this default, so listing a load balancer
+     lost the client address of the console, SFTP and FTP. The nodes of a
+     distributed deployment, which forward some admin requests to each
+     other, were not trusted at all. Loopback and the nodes are now
+     always trusted, and the default list is empty (note 33).
    - **`api trusted_proxy_header`** (`MINIO_API_TRUSTED_PROXY_HEADER`):
      `x-forwarded-for` (default) or `x-real-ip`. It is configured, not
      guessed. A proxy rewrites only its own header, and any other header
