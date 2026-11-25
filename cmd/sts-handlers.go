@@ -33,6 +33,7 @@ import (
 
 	"github.com/minio/madmin-go/v3"
 	"github.com/minio/minio/internal/auth"
+	xldap "github.com/minio/minio/internal/config/identity/ldap"
 	"github.com/minio/minio/internal/config/identity/openid"
 	"github.com/minio/minio/internal/hash/sha256"
 	xhttp "github.com/minio/minio/internal/http"
@@ -692,7 +693,10 @@ func (sts *stsAPIHandlers) AssumeRoleWithLDAPIdentity(w http.ResponseWriter, r *
 
 	lookupResult, groupDistNames, err := globalIAMSys.LDAPConfig.Bind(ldapUsername, ldapPassword)
 	if err != nil {
-		err = fmt.Errorf("LDAP server error: %w", err)
+		if !errors.Is(err, xldap.ErrLoginFailed) {
+			err = fmt.Errorf("LDAP server error: %w", err)
+		}
+		logLDAPLoginFailure(ctx, err)
 		writeSTSErrorResponse(ctx, w, ErrSTSInvalidParameterValue, err)
 		return
 	}

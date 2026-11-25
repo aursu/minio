@@ -227,9 +227,50 @@ func (l *Config) GetValidatedDNWithGroups(username string) (*xldap.DNSearchResul
 	return lookupRes, groups, nil
 }
 
+// ErrLoginFailed is the one answer to a failed LDAP login, whatever the
+// cause: an unknown user, a wrong password or a refused bind. Telling them
+// apart let anyone find out which users exist (CVE-2026-33419). The text
+// keeps "not found": the console falls back to its built-in login on it.
+var ErrLoginFailed = errors.New("LDAP authentication failed: user not found or invalid password")
+
+// LoginError is a failed LDAP login. Its message is that of ErrLoginFailed;
+// the cause is for the server's own log and is never sent to the client.
+type LoginError struct {
+	cause error
+}
+
+func (e *LoginError) Error() string { return ErrLoginFailed.Error() }
+
+// Is makes errors.Is(err, ErrLoginFailed) true.
+func (e *LoginError) Is(target error) bool { return target == ErrLoginFailed }
+
+// Cause returns what actually failed.
+func (e *LoginError) Cause() error { return e.cause }
+
+// Ordinary reports whether the cause is an unknown user or a wrong
+// password, rather than something for an administrator to look at.
+func (e *LoginError) Ordinary() bool {
+	return strings.Contains(e.cause.Error(), "User DN not found for") ||
+		ldap.IsErrorWithCode(e.cause, ldap.LDAPResultInvalidCredentials)
+}
+
 // Bind - binds to ldap, searches LDAP and returns the distinguished name of the
 // user and the list of groups.
+//
+// A failed login returns a *LoginError, and takes at least the configured
+// login failure delay: an unknown user skips the password bind, and would
+// otherwise be answered sooner than a wrong password.
 func (l *Config) Bind(username, password string) (*xldap.DNSearchResult, []string, error) {
+	start := time.Now()
+	lookupResult, groups, err := l.bind(username, password)
+	var loginErr *LoginError
+	if errors.As(err, &loginErr) {
+		time.Sleep(time.Until(start.Add(l.loginFailureDelay)))
+	}
+	return lookupResult, groups, err
+}
+
+func (l *Config) bind(username, password string) (*xldap.DNSearchResult, []string, error) {
 	conn, err := l.LDAP.Connect()
 	if err != nil {
 		return nil, nil, err
@@ -244,15 +285,13 @@ func (l *Config) Bind(username, password string) (*xldap.DNSearchResult, []strin
 	// Lookup user DN
 	lookupResult, err := l.LDAP.LookupUsername(conn, username)
 	if err != nil {
-		errRet := fmt.Errorf("Unable to find user DN: %w", err)
-		return nil, nil, errRet
+		return nil, nil, &LoginError{fmt.Errorf("Unable to find user DN: %w", err)}
 	}
 
 	// Authenticate the user credentials.
 	err = conn.Bind(lookupResult.ActualDN, password)
 	if err != nil {
-		errRet := fmt.Errorf("LDAP auth failed for DN %s: %w", lookupResult.ActualDN, err)
-		return nil, nil, errRet
+		return nil, nil, &LoginError{fmt.Errorf("LDAP auth failed for DN %s: %w", lookupResult.ActualDN, err)}
 	}
 
 	// Bind to the lookup user account again to perform group search.
