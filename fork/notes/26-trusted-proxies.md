@@ -59,7 +59,12 @@ client address.
    - **X-Real-IP is one address**, the last field if several are sent. A
      trusted address in it is the client, not a proxy to walk past.
    - **IPv4-mapped IPv6 addresses** are compared and reported as IPv4, and
-     zones are dropped.
+     zones are dropped. **Correction (2026-11-25, review of #51):** that
+     held for a single address in `trusted_proxies`, not for a prefix.
+     `::ffff:10.0.0.0/104` stayed an IPv6 prefix and never matched the
+     unmapped request addresses. Since PR #59 a mapped prefix of /96 or
+     longer becomes the IPv4 prefix it stands for (`10.0.0.0/8`), and a
+     shorter one is rejected.
    - **Invalid values** fail the config lookup, as for other keys. The
      server applies the config even then; it then trusts no proxy, so
      the failure is closed. **Correction (2026-11-25, review of #51):**

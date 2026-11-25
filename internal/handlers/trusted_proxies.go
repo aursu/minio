@@ -84,6 +84,15 @@ func ParseTrustedProxies(list, header string) (TrustedProxies, error) {
 			addr = addr.Unmap()
 			prefix = netip.PrefixFrom(addr, addr.BitLen())
 		}
+		// Request addresses are compared unmapped, as IPv4, so an
+		// IPv4-mapped prefix must become the IPv4 prefix it stands for, or
+		// it would never match. Shorter than /96 it is not one.
+		if a := prefix.Addr(); a.Is4In6() {
+			if prefix.Bits() < 96 {
+				return t, fmt.Errorf("invalid trusted proxy %q: an IPv4-mapped prefix must be /96 or longer", item)
+			}
+			prefix = netip.PrefixFrom(a.Unmap(), prefix.Bits()-96)
+		}
 		t.prefixes = append(t.prefixes, prefix.Masked())
 	}
 	return t, nil
