@@ -96,6 +96,8 @@ const (
 
 	LoginMaxAccountsPerAddress = "login_max_accounts_per_address"
 	LoginAddressLockout        = "login_address_lockout"
+	LoginMaxFailuresPerAccount = "login_max_failures_per_account"
+	LoginAccountWindow         = "login_account_window"
 
 	EnvServerAddr         = "MINIO_IDENTITY_LDAP_SERVER_ADDR"
 	EnvSRVRecordName      = "MINIO_IDENTITY_LDAP_SRV_RECORD_NAME"
@@ -201,6 +203,14 @@ var (
 		},
 		config.KV{
 			Key:   LoginAddressLockout,
+			Value: "15m",
+		},
+		config.KV{
+			Key:   LoginMaxFailuresPerAccount,
+			Value: "100",
+		},
+		config.KV{
+			Key:   LoginAccountWindow,
 			Value: "15m",
 		},
 	}
@@ -428,6 +438,12 @@ func (l *Config) lookupLoginLimits(getCfgVal func(string) string) error {
 		return err
 	}
 	if limits.AddressLockout, err = duration(LoginAddressLockout); err != nil {
+		return err
+	}
+	if limits.MaxFailuresPerAccount, err = count(LoginMaxFailuresPerAccount); err != nil {
+		return err
+	}
+	if limits.AccountWindow, err = duration(LoginAccountWindow); err != nil {
 		return err
 	}
 	l.limiter = newLoginLimiter(limits)

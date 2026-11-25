@@ -185,8 +185,8 @@ func TestLoginLimiterDisabled(t *testing.T) {
 		fail(t, l, dn, addr)
 	}
 	wantWait(t, l, dn, addr, 0)
-	if len(l.state)+len(l.addresses) != 0 {
-		t.Fatalf("disabled limiter keeps %d states", len(l.state)+len(l.addresses))
+	if l.size() != 0 {
+		t.Fatalf("disabled limiter keeps %d states", l.size())
 	}
 
 	var none *loginLimiter
@@ -318,5 +318,70 @@ func TestLoginLimiterAddressSweep(t *testing.T) {
 	fail(t, l, dn, addr) // two more states; the first sweeps
 	if len(l.state) != 1 || len(l.addresses) != 1 {
 		t.Fatalf("after the sweep: %d states, %d addresses; want 1 and 1", len(l.state), len(l.addresses))
+	}
+}
+
+var accountLimits = LoginLimits{
+	Backoff: time.Second, BackoffFactor: 2, MaxFailures: 10, Lockout: 15 * time.Minute,
+	MaxFailuresPerAccount: 3, AccountWindow: 15 * time.Minute,
+}
+
+func address(i int) string { return fmt.Sprintf("198.51.100.%d", i) }
+
+// MaxFailuresPerAccount failures of one account from any addresses lock the
+// account out for every address; other accounts are not affected.
+func TestLoginLimiterAccountLockout(t *testing.T) {
+	l, c := testLimiter(accountLimits)
+	fail(t, l, dn, address(1))
+	fail(t, l, dn, address(2))
+	if !fail(t, l, dn, address(3)) {
+		t.Fatal("3 failures from 3 addresses did not lock the account out")
+	}
+	wantWait(t, l, dn, address(4), 15*time.Minute)
+	wantWait(t, l, account(1), address(4), 0)
+
+	c.advance(15 * time.Minute)
+	wantWait(t, l, dn, address(5), 0)
+}
+
+// Failures count within AccountWindow only, and a success does not clear
+// them.
+func TestLoginLimiterAccountWindowAndSuccess(t *testing.T) {
+	l, c := testLimiter(accountLimits)
+	fail(t, l, dn, address(1))
+	c.advance(10 * time.Minute)
+	fail(t, l, dn, address(2))
+	c.advance(5 * time.Minute) // the first failure leaves the window
+	if fail(t, l, dn, address(3)) {
+		t.Fatal("a failure older than the window still counted")
+	}
+	l.succeeded(dn, address(9))
+	if !fail(t, l, dn, address(4)) {
+		t.Fatal("a success cleared the failures from other addresses")
+	}
+}
+
+func TestLoginLimiterAccountOnly(t *testing.T) {
+	onlyAccount := LoginLimits{MaxFailuresPerAccount: 3, AccountWindow: 15 * time.Minute}
+	l, _ := testLimiter(onlyAccount)
+	fail(t, l, dn, addr) // no wait between failures from one address
+	fail(t, l, dn, addr)
+	if !fail(t, l, dn, addr) {
+		t.Fatal("account limit did not apply alone")
+	}
+	if len(l.state)+len(l.addresses) != 0 {
+		t.Fatalf("%d other states with only the account limit", len(l.state)+len(l.addresses))
+	}
+}
+
+func TestLoginLimiterAccountSweep(t *testing.T) {
+	l, c := testLimiter(LoginLimits{MaxFailuresPerAccount: 3, AccountWindow: 15 * time.Minute})
+	for i := range minSweep {
+		fail(t, l, account(i), addr)
+	}
+	c.advance(time.Hour)
+	fail(t, l, dn, addr)
+	if len(l.accounts) != 1 {
+		t.Fatalf("%d account states after the sweep, want 1", len(l.accounts))
 	}
 }
