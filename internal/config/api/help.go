@@ -116,5 +116,17 @@ var (
 			Optional:    true,
 			Type:        "number",
 		},
+		config.HelpKV{
+			Key:         apiTrustedProxies,
+			Description: `set comma separated list of IP addresses and CIDR prefixes of the proxies whose forwarding header gives the client address; "none" or empty trusts no proxy` + defaultHelpPostfix(apiTrustedProxies),
+			Optional:    true,
+			Type:        "csv",
+		},
+		config.HelpKV{
+			Key:         apiTrustedProxyHeader,
+			Description: `set the header the trusted proxies write the client address to, "x-forwarded-for" or "x-real-ip"` + defaultHelpPostfix(apiTrustedProxyHeader),
+			Optional:    true,
+			Type:        "string",
+		},
 	}
 )

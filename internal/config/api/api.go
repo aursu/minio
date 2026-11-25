@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/minio/minio/internal/config"
+	"github.com/minio/minio/internal/handlers"
 	"github.com/minio/pkg/v3/env"
 )
 
@@ -52,6 +53,8 @@ const (
 	apiRootAccess                  = "root_access"
 	apiSyncEvents                  = "sync_events"
 	apiObjectMaxVersions           = "object_max_versions"
+	apiTrustedProxies              = "trusted_proxies"
+	apiTrustedProxyHeader          = "trusted_proxy_header"
 
 	EnvAPIRequestsMax             = "MINIO_API_REQUESTS_MAX"
 	EnvAPIRequestsDeadline        = "MINIO_API_REQUESTS_DEADLINE"
@@ -76,6 +79,8 @@ const (
 	EnvAPISyncEvents                  = "MINIO_API_SYNC_EVENTS" // default "off"
 	EnvAPIObjectMaxVersions           = "MINIO_API_OBJECT_MAX_VERSIONS"
 	EnvAPIObjectMaxVersionsLegacy     = "_MINIO_OBJECT_MAX_VERSIONS"
+	EnvAPITrustedProxies              = "MINIO_API_TRUSTED_PROXIES"
+	EnvAPITrustedProxyHeader          = "MINIO_API_TRUSTED_PROXY_HEADER"
 )
 
 // Deprecated key and ENVs
@@ -162,6 +167,14 @@ var (
 			Key:   apiObjectMaxVersions,
 			Value: "9223372036854775807",
 		},
+		config.KV{
+			Key:   apiTrustedProxies,
+			Value: handlers.DefaultTrustedProxies,
+		},
+		config.KV{
+			Key:   apiTrustedProxyHeader,
+			Value: handlers.ProxyHeaderXForwardedFor,
+		},
 	}
 )
 
@@ -184,6 +197,9 @@ type Config struct {
 	RootAccess                  bool          `json:"root_access"`
 	SyncEvents                  bool          `json:"sync_events"`
 	ObjectMaxVersions           int64         `json:"object_max_versions"`
+
+	// TrustedProxies decides where the client address of a request comes from.
+	TrustedProxies handlers.TrustedProxies `json:"-"`
 }
 
 // UnmarshalJSON - Validate SS and RRS parity when unmarshalling JSON.
@@ -217,6 +233,18 @@ func LookupConfig(kvs config.KVS) (cfg Config, err error) {
 		EnableODirect: enableODirect || !disableODirect,
 		GzipObjects:   gzipObjects,
 		RootAccess:    rootAccess,
+	}
+
+	// An empty list is kept as set: it trusts no proxy. A key that was
+	// never set has its default here, because the config is merged with
+	// DefaultKVS before it is looked up.
+	cfg.TrustedProxies, err = handlers.ParseTrustedProxies(
+		env.Get(EnvAPITrustedProxies, kvs.Get(apiTrustedProxies)),
+		env.Get(EnvAPITrustedProxyHeader, kvs.GetWithDefault(apiTrustedProxyHeader, DefaultKVS)))
+	if err != nil {
+		// cfg is applied even when invalid; its zero TrustedProxies
+		// trusts no proxy.
+		return cfg, err
 	}
 
 	var corsAllowOrigin []string
