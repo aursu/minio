@@ -20,7 +20,6 @@ package cmd
 import (
 	"bufio"
 	"context"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -28,13 +27,11 @@ import (
 	"net/http"
 	"os/user"
 	"path"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/minio/minio/internal/bpool"
 	"github.com/minio/minio/internal/grid"
 	"github.com/tinylib/msgp/msgp"
 
@@ -962,157 +959,6 @@ func waitForHTTPResponse(respBody io.Reader) (io.Reader, error) {
 	}
 }
 
-// httpStreamResponse allows streaming a response, but still send an error.
-type httpStreamResponse struct {
-	done  chan error
-	block chan []byte
-	err   error
-}
-
-// Write part of the streaming response.
-// Note that upstream errors are currently not forwarded, but may be in the future.
-func (h *httpStreamResponse) Write(b []byte) (int, error) {
-	if len(b) == 0 || h.err != nil {
-		// Ignore 0 length blocks
-		return 0, h.err
-	}
-	tmp := make([]byte, len(b))
-	copy(tmp, b)
-	h.block <- tmp
-	return len(b), h.err
-}
-
-// CloseWithError will close the stream and return the specified error.
-// This can be done several times, but only the first error will be sent.
-// After calling this the stream should not be written to.
-func (h *httpStreamResponse) CloseWithError(err error) {
-	if h.done == nil {
-		return
-	}
-	h.done <- err
-	h.err = err
-	// Indicates that the response is done.
-	<-h.done
-	h.done = nil
-}
-
-// streamHTTPResponse can be used to avoid timeouts with long storage
-// operations, such as bitrot verification or data usage scanning.
-// Every 10 seconds a space character is sent.
-// The returned function should always be called to release resources.
-// An optional error can be sent which will be picked as text only error,
-// without its original type by the receiver.
-// waitForHTTPStream should be used to the receiving side.
-func streamHTTPResponse(w http.ResponseWriter) *httpStreamResponse {
-	doneCh := make(chan error)
-	blockCh := make(chan []byte)
-	h := httpStreamResponse{done: doneCh, block: blockCh}
-	go func() {
-		canWrite := true
-		write := func(b []byte) {
-			if canWrite {
-				n, err := w.Write(b)
-				if err != nil || n != len(b) {
-					canWrite = false
-				}
-			}
-		}
-
-		ticker := time.NewTicker(time.Second * 10)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				// Response not ready, write a filler byte.
-				write([]byte{32})
-				if canWrite {
-					xhttp.Flush(w)
-				}
-			case err := <-doneCh:
-				if err != nil {
-					write([]byte{1})
-					write([]byte(err.Error()))
-				} else {
-					write([]byte{0})
-				}
-				xioutil.SafeClose(doneCh)
-				return
-			case block := <-blockCh:
-				var tmp [5]byte
-				tmp[0] = 2
-				binary.LittleEndian.PutUint32(tmp[1:], uint32(len(block)))
-				write(tmp[:])
-				write(block)
-				if canWrite {
-					xhttp.Flush(w)
-				}
-			}
-		}
-	}()
-	return &h
-}
-
-var poolBuf8k = bpool.Pool[*[]byte]{
-	New: func() *[]byte {
-		b := make([]byte, 8192)
-		return &b
-	},
-}
-
-// waitForHTTPStream will wait for responses where
-// streamHTTPResponse has been used.
-// The returned reader contains the payload and must be closed if no error is returned.
-func waitForHTTPStream(respBody io.ReadCloser, w io.Writer) error {
-	var tmp [1]byte
-	// 8K copy buffer, reused for less allocs...
-	bufp := poolBuf8k.Get()
-	buf := *bufp
-	defer poolBuf8k.Put(bufp)
-
-	for {
-		_, err := io.ReadFull(respBody, tmp[:])
-		if err != nil {
-			return err
-		}
-		// Check if we have a response ready or a filler byte.
-		switch tmp[0] {
-		case 0:
-			// 0 is unbuffered, copy the rest.
-			_, err := io.CopyBuffer(w, respBody, buf)
-			if err == io.EOF {
-				return nil
-			}
-			return err
-		case 1:
-			errorText, err := io.ReadAll(respBody)
-			if err != nil {
-				return err
-			}
-			return errors.New(string(errorText))
-		case 2:
-			// Block of data
-			var tmp [4]byte
-			_, err := io.ReadFull(respBody, tmp[:])
-			if err != nil {
-				return err
-			}
-			length := binary.LittleEndian.Uint32(tmp[:])
-			n, err := io.CopyBuffer(w, io.LimitReader(respBody, int64(length)), buf)
-			if err != nil {
-				return err
-			}
-			if n != int64(length) {
-				return io.ErrUnexpectedEOF
-			}
-			continue
-		case 32:
-			continue
-		default:
-			return fmt.Errorf("unexpected filler byte: %d", tmp[0])
-		}
-	}
-}
-
 // VerifyFileHandler - Verify all part of file for bitrot errors.
 func (s *storageRESTServer) VerifyFileHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.IsValid(w, r) {
@@ -1283,48 +1129,6 @@ func (s *storageRESTServer) DeleteBulkHandler(w http.ResponseWriter, r *http.Req
 	keepHTTPResponseAlive(w)(s.getStorage().DeleteBulk(r.Context(), volume, req.Paths...))
 }
 
-// ReadMultiple returns multiple files
-func (s *storageRESTServer) ReadMultiple(w http.ResponseWriter, r *http.Request) {
-	if !s.IsValid(w, r) {
-		return
-	}
-	rw := streamHTTPResponse(w)
-	defer func() {
-		if r := recover(); r != nil {
-			debug.PrintStack()
-			rw.CloseWithError(fmt.Errorf("panic: %v", r))
-		}
-	}()
-
-	var req ReadMultipleReq
-	mr := msgpNewReader(r.Body)
-	defer readMsgpReaderPoolPut(mr)
-	err := req.DecodeMsg(mr)
-	if err != nil {
-		rw.CloseWithError(err)
-		return
-	}
-
-	mw := msgp.NewWriter(rw)
-	responses := make(chan ReadMultipleResp, len(req.Files))
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for resp := range responses {
-			err := resp.EncodeMsg(mw)
-			if err != nil {
-				rw.CloseWithError(err)
-				return
-			}
-			mw.Flush()
-		}
-	}()
-	err = s.getStorage().ReadMultiple(r.Context(), req, responses)
-	wg.Wait()
-	rw.CloseWithError(err)
-}
-
 // globalLocalSetDrives is used for local drive as well as remote REST
 // API caller for other nodes to talk to this node.
 //
@@ -1363,7 +1167,6 @@ func registerStorageRESTHandlers(router *mux.Router, endpointServerPools Endpoin
 			subrouter.Methods(http.MethodPost).Path(storageRESTVersionPrefix + storageRESTMethodDeleteVersions).HandlerFunc(h(server.DeleteVersionsHandler))
 			subrouter.Methods(http.MethodPost).Path(storageRESTVersionPrefix + storageRESTMethodVerifyFile).HandlerFunc(h(server.VerifyFileHandler))
 			subrouter.Methods(http.MethodPost).Path(storageRESTVersionPrefix + storageRESTMethodStatInfoFile).HandlerFunc(h(server.StatInfoFile))
-			subrouter.Methods(http.MethodPost).Path(storageRESTVersionPrefix + storageRESTMethodReadMultiple).HandlerFunc(h(server.ReadMultiple))
 			subrouter.Methods(http.MethodPost).Path(storageRESTVersionPrefix + storageRESTMethodCleanAbandoned).HandlerFunc(h(server.CleanAbandonedDataHandler))
 			subrouter.Methods(http.MethodPost).Path(storageRESTVersionPrefix + storageRESTMethodDeleteBulk).HandlerFunc(h(server.DeleteBulkHandler))
 			subrouter.Methods(http.MethodPost).Path(storageRESTVersionPrefix + storageRESTMethodReadParts).HandlerFunc(h(server.ReadPartsHandler))
