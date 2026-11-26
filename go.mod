@@ -15,18 +15,18 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.1
 	github.com/IBM/sarama v1.45.1
 	github.com/alecthomas/participle v0.7.1
-	github.com/beevik/ntp v1.4.3
+	github.com/beevik/ntp v1.6.0
 	github.com/buger/jsonparser v1.1.2
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/cheggaaa/pb v1.0.29
+	github.com/cheggaaa/pb v1.0.30
 	github.com/coreos/go-oidc/v3 v3.14.1
-	github.com/coreos/go-systemd/v22 v22.6.0
-	github.com/cosnicolaou/pbzip2 v1.0.5
+	github.com/coreos/go-systemd/v22 v22.7.0
+	github.com/cosnicolaou/pbzip2 v1.0.6
 	github.com/dchest/siphash v1.2.3
-	github.com/dustin/go-humanize v1.0.1
+	github.com/dustin/go-humanize v1.1.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/elastic/go-elasticsearch/v7 v7.17.10
-	github.com/fatih/color v1.18.0
+	github.com/fatih/color v1.19.0
 	github.com/felixge/fgprof v0.9.5
 	github.com/fraugster/parquet-go v0.12.0
 	github.com/go-ldap/ldap/v3 v3.4.11
@@ -39,14 +39,14 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0
 	github.com/json-iterator/go v1.1.12
 	github.com/klauspost/compress v1.20.2
-	github.com/klauspost/cpuid/v2 v2.2.10
+	github.com/klauspost/cpuid/v2 v2.4.2
 	github.com/klauspost/filepathx v1.1.1
 	github.com/klauspost/pgzip v1.2.6
 	github.com/klauspost/readahead v1.4.0
 	github.com/klauspost/reedsolomon v1.12.4
 	github.com/lib/pq v1.10.9
-	github.com/lithammer/shortuuid/v4 v4.2.0
-	github.com/miekg/dns v1.1.72
+	github.com/lithammer/shortuuid/v4 v4.3.0
+	github.com/miekg/dns v1.1.73
 	github.com/minio/cli v1.24.2
 	github.com/minio/console v1.7.7-0.20250905210349-2017f33b26e1
 	github.com/minio/csvparser v1.0.0
@@ -70,11 +70,11 @@ require (
 	github.com/nats-io/stan.go v0.10.4
 	github.com/ncw/directio v1.0.5
 	github.com/nsqio/go-nsq v1.1.0
-	github.com/philhofer/fwd v1.2.0
-	github.com/pierrec/lz4/v4 v4.1.22
+	github.com/philhofer/fwd v1.2.1
+	github.com/pierrec/lz4/v4 v4.1.34
 	github.com/pkg/errors v0.9.1
 	github.com/pkg/sftp v1.13.9
-	github.com/pkg/xattr v0.4.10
+	github.com/pkg/xattr v0.4.12
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.67.5
@@ -91,15 +91,15 @@ require (
 	github.com/zeebo/xxh3 v1.0.2
 	go.etcd.io/etcd/api/v3 v3.5.36
 	go.etcd.io/etcd/client/v3 v3.5.36
-	go.uber.org/atomic v1.11.0
-	go.uber.org/zap v1.27.1
+	go.uber.org/atomic v1.12.0
+	go.uber.org/zap v1.28.0
 	goftp.io/server/v2 v2.0.1
 	golang.org/x/crypto v0.59.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.38.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/sys v0.50.0
 	golang.org/x/term v0.48.0
-	golang.org/x/time v0.15.0
+	golang.org/x/time v0.16.0
 	google.golang.org/api v0.272.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
