@@ -22,10 +22,16 @@ credentials. A compromised node, or a leaked root key, becomes a read of
 host files: TLS keys, KMS key material, `/etc/shadow`. Unlike the data,
 these do not change when the root credentials are rotated.
 
-**Nothing in MinIO calls `ReadMultiple`.** The last caller, the multipart
-listing, was changed upstream on 2023-10-24 (`c60f54e5b`, #18312). Only
+**Nothing in MinIO calls `ReadMultiple`.** The last caller,
+`readMultipleFiles` in `cmd/erasure-common.go` (used to complete multipart
+uploads), was removed upstream on 2024-08-12 (`2e0fd2cba`, #20227). Only
 the route, the handler, the REST client method, the `StorageAPI` method
 and its wrappers were left: an attack surface with no use.
+**Correction (2026-11-26):** this said the last caller went on 2023-10-24
+(`c60f54e5b`, #18312), as does the commit message of #64. That commit
+removed an earlier caller, the multipart listing; `git log -S` lists every
+commit that changes the count, and the last one was taken for the first.
+The parallel session found the right one. The conclusions stand.
 
 ## What (one commit)
 
@@ -61,7 +67,7 @@ was always zero.
 
 **No storage REST version bump.** The version is compared between nodes
 to refuse a mix of releases. Removing a call that no release since
-2023-10 sends does not need that.
+2024-08 sends does not need that.
 
 ## Public fixes compared (2026-11-26)
 
@@ -90,7 +96,7 @@ code is taken.
 ## Client-visible change (for the release notes)
 
 - None for S3 clients. A node of an older release that sent `rmpl` would
-  get an error, but no release since 2023-10 sends it, and MinIO does not
+  get an error, but no release since 2024-08 sends it, and MinIO does not
   run mixed releases.
 - The drive metrics no longer list a `ReadMultiple` entry.
 
