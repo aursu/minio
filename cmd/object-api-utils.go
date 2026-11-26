@@ -890,8 +890,12 @@ func NewGetObjectReader(rs *HTTPRangeSpec, oi ObjectInfo, opts ObjectOptions, h 
 			}
 			// Decompression reader.
 			var dopts []s2.ReaderOption
-			if off > 0 || decOff > 0 {
-				// We are not starting at the beginning, so ignore stream identifiers.
+			// We are not starting at the beginning, so ignore stream
+			// identifiers. decryptSkip counts too: when the compressed data
+			// before the range fits in the first encryption package, off and
+			// decOff are both 0, yet the reader starts inside that package,
+			// at a compression block that has no stream identifier.
+			if off > 0 || decOff > 0 || decryptSkip > 0 {
 				dopts = append(dopts, s2.ReaderIgnoreStreamIdentifier())
 			}
 			s2Reader := s2.NewReader(inputReader, dopts...)
