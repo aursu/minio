@@ -1,4 +1,4 @@
-# 40 — plan 04 step 2.4, group A: sixteen leaf modules
+# 40 — plan 04 step 2.4, group A: fifteen leaf modules
 
 Date: 2026-11-26.
 
@@ -33,14 +33,13 @@ The groups go into the release after `aursu.2`.
 
 ## What
 
-`go get` of sixteen modules, then `go mod tidy -compat=1.21` (the
+`go get` of fifteen modules, then `go mod tidy -compat=1.21` (the
 command `make check-gen` runs):
 
 | Module | From | To |
 |---|---|---|
 | github.com/beevik/ntp | v1.4.3 | v1.6.0 |
 | github.com/cheggaaa/pb | v1.0.29 | v1.0.30 |
-| github.com/coreos/go-systemd/v22 | v22.6.0 | v22.7.0 |
 | github.com/cosnicolaou/pbzip2 | v1.0.5 | v1.0.6 |
 | github.com/dustin/go-humanize | v1.0.1 | v1.1.0 |
 | github.com/fatih/color | v1.18.0 | v1.19.0 |
@@ -76,7 +75,7 @@ The three largest diffs were read (non-test sources):
   asked for), kernel receive timestamps on Linux and macOS, and
   dependency updates. `ntp.Time` keeps its NTPv4 behavior.
 
-The other thirteen diffs are small (8 to 480 lines).
+The other twelve diffs are small (8 to 480 lines).
 
 ## Held back, not taken
 
@@ -97,6 +96,19 @@ Recommended, accepted (Alexander, 2026-11-26):
   AIStor route table. No security fix either. A change in which route
   matches changes which handler, and so which permission check, a request
   reaches.
+
+Corrected 2026-11-26, after the first CI run of #66:
+
+- **github.com/coreos/go-systemd/v22 stays at v22.6.0** (latest v22.7.0).
+  The first version of this change took v22.7.0, and "Build Tests"
+  (`make crosscompile`) failed for netbsd/amd64:
+  `daemon/sdnotify_unix.go:31: undefined: unix.CLOCK_MONOTONIC`. v22.7.0
+  builds that file for every `unix` target and calls
+  `unix.ClockGettime(unix.CLOCK_MONOTONIC, …)`; golang.org/x/sys, up to
+  its latest v0.50.0, defines no `CLOCK_MONOTONIC` for netbsd. No x/sys
+  version fixes it, so the module goes back. The local checks of this
+  change had built linux/amd64 only; the cross-compile of all fifteen
+  targets in the Makefile list is now part of the checks.
 
 Also left out of this group: `github.com/go-openapi/loads` (v0.23.2 →
 v0.25.4). The go-openapi modules move together with the console's
@@ -125,8 +137,13 @@ full suites.
   0 issues.
 - govulncheck v1.10.0: no vulnerabilities.
 - GitHub advisories (`/advisories?ecosystem=go&affects=<module>@<version>`)
-  for each of the sixteen new versions: none. The query was checked on
+  for each of the new versions: none. The query was checked on
   `github.com/buger/jsonparser@1.1.1`, which returns GHSA-6g7g-w4f8-9c9x.
+
+After the go-systemd rollback: `go build` with `CGO_ENABLED=0 -tags
+kqueue` for all fifteen targets of `buildscripts/cross-compile.sh`
+(linux ppc64le, mips64, amd64, arm64, s390x, arm, 386, mips, riscv64;
+darwin arm64 and amd64; freebsd, windows, netbsd and openbsd amd64): ok.
 
 The first run of these checks had jsonparser v1.6.1 and mux v1.10.1 in as
 well; it passed too. They are held back for the reasons above, not
