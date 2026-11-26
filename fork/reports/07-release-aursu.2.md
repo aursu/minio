@@ -126,7 +126,7 @@ Both are recorded in the fork's CI notes.
 
 ## Next
 
-- **Confine the volume and path arguments of every storage RPC.**
+- **Deferred (Alexander, 2026-11-26: not now): confine the volume and path arguments of every storage RPC.**
   - `getVolDir` rejects only `""`, `.` and `..`, and the grid storage RPCs bypass the request validity middleware.
   - So a holder of the internode token can reach files outside the drive through other calls as well. This is the same attacker as CVE-2026-42600.
   - There is no advisory of its own. Checklist: relvo-labs/granary #82 (note 35).
