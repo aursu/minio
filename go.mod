@@ -20,7 +20,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cheggaaa/pb v1.0.30
 	github.com/coreos/go-oidc/v3 v3.14.1
-	github.com/coreos/go-systemd/v22 v22.7.0
+	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/cosnicolaou/pbzip2 v1.0.6
 	github.com/dchest/siphash v1.2.3
 	github.com/dustin/go-humanize v1.1.0
