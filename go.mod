@@ -24,17 +24,17 @@ require (
 	github.com/cosnicolaou/pbzip2 v1.0.6
 	github.com/dchest/siphash v1.2.3
 	github.com/dustin/go-humanize v1.1.0
-	github.com/eclipse/paho.mqtt.golang v1.5.1
+	github.com/eclipse/paho.mqtt.golang v1.5.2
 	github.com/elastic/go-elasticsearch/v7 v7.17.10
 	github.com/fatih/color v1.19.0
 	github.com/felixge/fgprof v0.9.5
 	github.com/fraugster/parquet-go v0.12.0
 	github.com/go-ldap/ldap/v3 v3.4.11
 	github.com/go-openapi/loads v0.23.2
-	github.com/go-sql-driver/mysql v1.9.2
+	github.com/go-sql-driver/mysql v1.10.2
 	github.com/gobwas/ws v1.5.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
-	github.com/gomodule/redigo v1.9.2
+	github.com/gomodule/redigo v1.9.3
 	github.com/google/uuid v1.6.0
 	github.com/inconshreveable/mousetrap v1.1.0
 	github.com/json-iterator/go v1.1.12
@@ -44,7 +44,7 @@ require (
 	github.com/klauspost/pgzip v1.2.6
 	github.com/klauspost/readahead v1.4.0
 	github.com/klauspost/reedsolomon v1.12.4
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.12.3
 	github.com/lithammer/shortuuid/v4 v4.3.0
 	github.com/miekg/dns v1.1.73
 	github.com/minio/cli v1.24.2
@@ -80,7 +80,7 @@ require (
 	github.com/prometheus/common v0.67.5
 	github.com/prometheus/procfs v0.16.1
 	github.com/puzpuzpuz/xsync/v3 v3.5.1
-	github.com/rabbitmq/amqp091-go v1.14.0
+	github.com/rabbitmq/amqp091-go v1.17.0
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
 	github.com/rs/cors v1.11.1
 	github.com/secure-io/sio-go v0.3.1
@@ -115,7 +115,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/iam v1.5.3 // indirect
 	cloud.google.com/go/monitoring v1.24.3 // indirect
-	filippo.io/edwards25519 v1.1.1 // indirect
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
 	github.com/Azure/go-ntlmssp v0.1.1 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.6.0 // indirect
