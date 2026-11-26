@@ -38,7 +38,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/inconshreveable/mousetrap v1.1.0
 	github.com/json-iterator/go v1.1.12
-	github.com/klauspost/compress v1.20.2
+	github.com/klauspost/compress v1.20.5
 	github.com/klauspost/cpuid/v2 v2.4.2
 	github.com/klauspost/filepathx v1.1.1
 	github.com/klauspost/pgzip v1.2.6
@@ -52,7 +52,7 @@ require (
 	github.com/minio/csvparser v1.0.0
 	github.com/minio/dnscache v0.1.1
 	github.com/minio/dperf v0.6.3
-	github.com/minio/highwayhash v1.0.3
+	github.com/minio/highwayhash v1.0.4
 	github.com/minio/kms-go/kes v0.3.1
 	github.com/minio/kms-go/kms v0.5.1-0.20250225090116-4e64ce8d0f35
 	github.com/minio/madmin-go/v3 v3.0.109
