@@ -795,8 +795,10 @@ func (s *xlStorage) getVolDir(volume string) (string, error) {
 	// The volume is joined to the drive path with pathJoin, which resolves
 	// ".." without confining it. Storage RPCs take the volume from the
 	// request body, which the request validity middleware does not check,
-	// so "bucket/../.." would leave the drive.
-	if hasBadPathComponent(volume) {
+	// so "bucket/../.." would leave the drive. A volume of separators only,
+	// such as "/", would name the drive root itself, every bucket and
+	// .minio.sys at once.
+	if hasBadPathComponent(volume) || strings.Trim(volume, `/\`) == "" {
 		return "", errVolumeAccessDenied
 	}
 	volumeDir := pathJoin(s.drivePath, volume)

@@ -173,6 +173,9 @@ func TestXLStoragePathArguments(t *testing.T) {
 	}{
 		{"getVolDir", errVolumeAccessDenied, func() error { _, err := storage.StatVol(ctx, "foo/"+bad); return err }},
 		{"MakeVol", errVolumeAccessDenied, func() error { return storage.MakeVol(ctx, "foo/"+bad+"/new") }},
+		{"volume /", errVolumeAccessDenied, func() error { _, err := storage.StatVol(ctx, "/"); return err }},
+		{"volume ///", errVolumeAccessDenied, func() error { _, err := storage.ListDir(ctx, "", "///", "", -1); return err }},
+		{"volume \\", errVolumeAccessDenied, func() error { return storage.DeleteVol(ctx, `\\`, true) }},
 		{"CheckParts DataDir", errFileAccessDenied, func() error { _, err := storage.CheckParts(ctx, "foo", "obj", fi); return err }},
 		{"VerifyFile DataDir", errFileAccessDenied, func() error { _, err := storage.VerifyFile(ctx, "foo", "obj", fi); return err }},
 		{"RenameData DataDir", errFileAccessDenied, func() error {
