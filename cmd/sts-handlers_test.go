@@ -22,6 +22,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"reflect"
 	"slices"
@@ -972,6 +974,9 @@ func TestIAMWithLDAPServerSuite(t *testing.T) {
 				suite.TestLDAPCyrillicUser(c)
 				suite.TestLDAPSlashDN(c)
 				suite.TestLDAPLoginFailure(c)
+				suite.TestLDAPLoginLimits(c)
+				suite.TestLDAPLoginAddressLimit(c)
+				suite.TestLDAPLoginAccountLimit(c)
 				suite.TearDownSuite(c)
 			},
 		)
@@ -2280,6 +2285,122 @@ func (s *TestSuiteIAM) TestLDAPLoginFailure(c *check) {
 	}
 	if diff := (unknownTook - wrongTook).Abs(); diff > 300*time.Millisecond {
 		c.Fatalf("answer times differ by %v (unknown user %v, wrong password %v)", diff, unknownTook, wrongTook)
+	}
+}
+
+// ldapLoginFrom calls AssumeRoleWithLDAPIdentity as a client at addr: the
+// test server's peer is loopback, which trusts X-Forwarded-For by default.
+func (s *TestSuiteIAM) ldapLoginFrom(c *check, addr, user, password string) string {
+	form := url.Values{
+		"Action":       {"AssumeRoleWithLDAPIdentity"},
+		"Version":      {stsAPIVersion},
+		"LDAPUsername": {user},
+		"LDAPPassword": {password},
+	}
+	req, err := http.NewRequest(http.MethodPost, s.endPoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		c.Fatalf("request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Forwarded-For", addr)
+	resp, err := s.TestSuiteCommon.client.Do(req)
+	if err != nil {
+		c.Fatalf("STS call: %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.Fatalf("STS response: %v", err)
+	}
+	return string(body)
+}
+
+// After login_max_failures wrong passwords from one address, the account is
+// refused there, with the answer of a wrong password, even for the right
+// password; another address is not affected.
+func (s *TestSuiteIAM) TestLDAPLoginLimits(c *check) {
+	ctx, cancel := context.WithTimeout(context.Background(), testDefaultTimeout)
+	defer cancel()
+	setLimits := func(kvs string) {
+		if _, err := s.adm.SetConfigKV(ctx, "identity_ldap "+kvs); err != nil {
+			c.Fatalf("unable to set the login limits: %v", err)
+		}
+		s.RestartIAMSuite(c)
+	}
+	setLimits("login_failure_delay=0s login_backoff=0s login_max_failures=3 login_lockout=1h")
+	defer setLimits("login_failure_delay=1s login_backoff=1s login_max_failures=10 login_lockout=15m")
+
+	const failed = "LDAP authentication failed: user not found or invalid password"
+	const attacker, other = "203.0.113.10", "203.0.113.11"
+	for i := 1; i <= 3; i++ {
+		if body := s.ldapLoginFrom(c, attacker, "dillon", "wrong-password"); !strings.Contains(body, failed) {
+			c.Fatalf("wrong password %d: %s", i, body)
+		}
+	}
+	if body := s.ldapLoginFrom(c, attacker, "dillon", "dillon"); !strings.Contains(body, failed) {
+		c.Fatalf("right password during the lockout was not refused alike: %s", body)
+	}
+	if body := s.ldapLoginFrom(c, other, "dillon", "dillon"); strings.Contains(body, failed) {
+		c.Fatalf("right password from another address was refused: %s", body)
+	}
+}
+
+// Failures on login_max_accounts_per_address different accounts lock the
+// address out for every account, with the answer of a wrong password;
+// another address is not affected.
+func (s *TestSuiteIAM) TestLDAPLoginAddressLimit(c *check) {
+	ctx, cancel := context.WithTimeout(context.Background(), testDefaultTimeout)
+	defer cancel()
+	setLimits := func(kvs string) {
+		if _, err := s.adm.SetConfigKV(ctx, "identity_ldap "+kvs); err != nil {
+			c.Fatalf("unable to set the login limits: %v", err)
+		}
+		s.RestartIAMSuite(c)
+	}
+	setLimits("login_failure_delay=0s login_backoff=0s login_max_accounts_per_address=2 login_address_lockout=1h")
+	defer setLimits("login_failure_delay=1s login_backoff=1s login_max_accounts_per_address=10 login_address_lockout=15m")
+
+	const failed = "LDAP authentication failed: user not found or invalid password"
+	const sprayer, other = "203.0.113.20", "203.0.113.21"
+	for _, user := range []string{"dillon", "svc.algorithm"} {
+		if body := s.ldapLoginFrom(c, sprayer, user, "Summer2026!"); !strings.Contains(body, failed) {
+			c.Fatalf("wrong password for %s: %s", user, body)
+		}
+	}
+	if body := s.ldapLoginFrom(c, sprayer, "dillon", "dillon"); !strings.Contains(body, failed) {
+		c.Fatalf("right password from the locked-out address was not refused alike: %s", body)
+	}
+	if body := s.ldapLoginFrom(c, other, "dillon", "dillon"); strings.Contains(body, failed) {
+		c.Fatalf("right password from another address was refused: %s", body)
+	}
+}
+
+// Failures of one account from many addresses lock the account out for
+// every address; another account is not affected.
+func (s *TestSuiteIAM) TestLDAPLoginAccountLimit(c *check) {
+	ctx, cancel := context.WithTimeout(context.Background(), testDefaultTimeout)
+	defer cancel()
+	setLimits := func(kvs string) {
+		if _, err := s.adm.SetConfigKV(ctx, "identity_ldap "+kvs); err != nil {
+			c.Fatalf("unable to set the login limits: %v", err)
+		}
+		s.RestartIAMSuite(c)
+	}
+	setLimits("login_failure_delay=0s login_max_failures_per_account=3 login_account_window=1h")
+	defer setLimits("login_failure_delay=1s login_max_failures_per_account=100 login_account_window=15m")
+
+	const failed = "LDAP authentication failed: user not found or invalid password"
+	for _, addr := range []string{"203.0.113.30", "203.0.113.31", "203.0.113.32"} {
+		if body := s.ldapLoginFrom(c, addr, "dillon", "wrong-password"); !strings.Contains(body, failed) {
+			c.Fatalf("wrong password from %s: %s", addr, body)
+		}
+	}
+	const fresh = "203.0.113.33"
+	if body := s.ldapLoginFrom(c, fresh, "dillon", "dillon"); !strings.Contains(body, failed) {
+		c.Fatalf("right password for the locked-out account was not refused alike: %s", body)
+	}
+	if body := s.ldapLoginFrom(c, fresh, "svc.algorithm", "example"); strings.Contains(body, failed) {
+		c.Fatalf("another account was refused: %s", body)
 	}
 }
 

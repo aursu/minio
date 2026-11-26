@@ -140,7 +140,7 @@ func authenticateSSHConnection(c ssh.ConnMetadata, key ssh.PublicKey, pass []byt
 		if !globalIAMSys.LDAPConfig.Enabled() {
 			return nil, errSFTPLDAPNotEnabled
 		}
-		return processLDAPAuthentication(key, pass, user)
+		return processLDAPAuthentication(key, pass, user, remoteHost(c.RemoteAddr()))
 	}
 
 	user, found = strings.CutSuffix(c.User(), "=svc")
@@ -149,7 +149,7 @@ func authenticateSSHConnection(c ssh.ConnMetadata, key ssh.PublicKey, pass []byt
 	}
 
 	if globalIAMSys.LDAPConfig.Enabled() {
-		perms, _ := processLDAPAuthentication(key, pass, user)
+		perms, _ := processLDAPAuthentication(key, pass, user, remoteHost(c.RemoteAddr()))
 		if perms != nil {
 			return perms, nil
 		}
@@ -190,7 +190,7 @@ internalAuth:
 	}, nil
 }
 
-func processLDAPAuthentication(key ssh.PublicKey, pass []byte, user string) (perms *ssh.Permissions, err error) {
+func processLDAPAuthentication(key ssh.PublicKey, pass []byte, user, clientAddr string) (perms *ssh.Permissions, err error) {
 	var lookupResult *xldap.DNSearchResult
 	var targetGroups []string
 
@@ -218,7 +218,7 @@ func processLDAPAuthentication(key ssh.PublicKey, pass []byte, user string) (per
 			return nil, err
 		}
 
-		lookupResult, targetGroups, err = globalIAMSys.LDAPConfig.Bind(user, string(pass))
+		lookupResult, targetGroups, err = globalIAMSys.LDAPConfig.Bind(user, string(pass), clientAddr)
 		if err != nil {
 			logLDAPLoginFailure(context.Background(), err)
 			return nil, err
