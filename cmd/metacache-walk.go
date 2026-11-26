@@ -82,6 +82,9 @@ func (s *xlStorage) WalkDir(ctx context.Context, opts WalkDirOptions, wr io.Writ
 	if err != nil {
 		return err
 	}
+	if err = checkPathArgs(opts.BaseDir); err != nil {
+		return err
+	}
 
 	if !skipAccessChecks(opts.Bucket) {
 		// Stat a volume entry.
