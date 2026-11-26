@@ -89,8 +89,8 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0
 	github.com/xdg/scram v1.0.5
 	github.com/zeebo/xxh3 v1.0.2
-	go.etcd.io/etcd/api/v3 v3.5.36
-	go.etcd.io/etcd/client/v3 v3.5.36
+	go.etcd.io/etcd/api/v3 v3.6.17
+	go.etcd.io/etcd/client/v3 v3.6.17
 	go.uber.org/atomic v1.12.0
 	go.uber.org/zap v1.28.0
 	goftp.io/server/v2 v2.0.1
@@ -187,6 +187,7 @@ require (
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/grafana/regexp v0.0.0-20250905093917-f7b3be9d1853 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
@@ -257,7 +258,7 @@ require (
 	github.com/vbauerster/mpb/v8 v8.9.3 // indirect
 	github.com/xdg/stringprep v1.0.3 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.5.36 // indirect
+	go.etcd.io/etcd/client/pkg/v3 v3.6.17 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.44.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0 // indirect
