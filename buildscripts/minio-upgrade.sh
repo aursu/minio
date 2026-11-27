@@ -158,7 +158,11 @@ __init__() {
 
 	curl -s http://127.0.0.1:9000/minio-test/to-read/hosts | sha256sum
 
-	MINIO_VERSION=dev /tmp/gopath/bin/docker-compose -f "buildscripts/upgrade-tests/compose.yml" stop
+	# Remove the old-release containers with their anonymous volumes (the
+	# Dockerfile's VOLUME /data, unused here); the named data volumes stay
+	# for the new release. Recreating them in main() would orphan those
+	# anonymous volumes, and cleanup() reaches only the current containers'.
+	MINIO_VERSION=dev /tmp/gopath/bin/docker-compose -f "buildscripts/upgrade-tests/compose.yml" rm --stop --force --volumes
 }
 
 main() {

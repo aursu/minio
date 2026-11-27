@@ -47,6 +47,20 @@ removes containers from an earlier run whose services were renamed. Both
 the old-release and the dev-release starts use the same compose file
 with no `-p`, so they share one project, `upgrade-tests`.
 
+**One more change was needed.** The first scoped run on media-gw left
+four empty anonymous volumes behind.
+
+- **Where they came from.** The `Dockerfile` `VOLUME /data` gives each
+  old-release container an anonymous volume. `main()` then recreates the
+  containers on the dev image, and the old containers' anonymous volumes
+  are orphaned. `down --volumes` reaches only the volumes of the current
+  containers, and the orphans carry no project label.
+- **The fix.** `__init__` now ends with `rm --stop --force --volumes`
+  instead of `stop`. That removes the old containers together with their
+  anonymous volumes, and keeps the named data volumes for the new
+  release. For the upgrade scenario nothing changes: new containers start
+  on the same data, as they did after the recreate.
+
 ## Alternatives rejected
 
 - **Keep the prune lines and guard them with `CI=true`.** Two cleanup
