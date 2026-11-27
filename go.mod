@@ -54,14 +54,14 @@ require (
 	github.com/minio/dperf v0.6.3
 	github.com/minio/highwayhash v1.0.4
 	github.com/minio/kms-go/kes v0.3.1
-	github.com/minio/kms-go/kms v0.5.1-0.20250225090116-4e64ce8d0f35
+	github.com/minio/kms-go/kms v0.6.0
 	github.com/minio/madmin-go/v3 v3.0.110
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/minio/mux v1.9.2
 	github.com/minio/pkg/v3 v3.1.3
 	github.com/minio/selfupdate v0.6.0
 	github.com/minio/simdjson-go v0.4.5
-	github.com/minio/sio v0.4.1
+	github.com/minio/sio v0.4.3
 	github.com/minio/xxml v0.0.3
 	github.com/minio/zipindex v0.4.0
 	github.com/mitchellh/go-homedir v1.1.0
