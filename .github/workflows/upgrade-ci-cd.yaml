@@ -23,14 +23,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04]
-        # 2019: upstream's scenario. The others: releases the fork's users run.
+        # Releases the fork's users run; 2025-04-22 is the last community
+        # release with the full console. No pre-2020 release: see note 38.
         old:
-          - version: RELEASE.2019-12-19T22-52-26Z
-            commit: 586614c73f902085465d07a1f854ca6c1efb9845
           - version: RELEASE.2024-10-13T13-34-11Z
             commit: d10bb7e1b667c2df72c394ef1fa52ab4a6802d0f
           - version: RELEASE.2025-03-12T18-04-18Z
             commit: dbf31af6cb0d5ea33b277b6e461cfea98262778e
+          - version: RELEASE.2025-04-22T22-12-26Z
+            commit: 0d7408fc9969caf07de6a8c3a84f9fbb10a6739e
 
     steps:
       - uses: actions/checkout@v4
