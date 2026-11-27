@@ -52,7 +52,7 @@ Run on media-gw with the image pulled from ghcr (scratch `item7/e2e.sh`). Two no
 
 ## CI on the way
 
-- **#67: "Upgrade from RELEASE.2019-12-19" failed once.** Anonymous reads alternated between 200 and 403, because one node booted before quorum. This is the fourth time this has happened. The rerun passed, and the flake is recorded in the fork's CI notes.
+- **#67: "Upgrade from RELEASE.2019-12-19" failed once.** Anonymous reads alternated between 200 and 403, because one node booted before quorum. *(Corrected 2026-11-27: the cause is a race in the migration of 2019 bucket configs; one node keeps the bucket without its policy. Note 38.)* This is the fourth time this has happened. The rerun passed, and the flake is recorded in the fork's CI notes.
 
 ## Next
 

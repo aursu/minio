@@ -12,6 +12,8 @@ call site, because each test wants its own old version.
 | Test | Old release | Commit | Was |
 |---|---|---|---|
 | `minio-upgrade.sh` (`make test-upgrade`) | `RELEASE.2019-12-19T22-52-26Z` | `586614c7` | image `minio/minio:<tag>` from Docker Hub |
+
+*(Updated 2026-11-27: `minio-upgrade.sh` now defaults to `RELEASE.2025-04-22T22-12-26Z`, and CI no longer runs the 2019 upgrade. Note 38.)*
 | `minio-iam-ldap-upgrade-import-test.sh` | `RELEASE.2024-03-26T22-10-45Z` | `8bce123b` | binary from `dl.min.io` |
 | `rewrite-old-new.sh` (`verify-healing-with-rewrite`) | `RELEASE.2020-10-28T08-16-50Z` | `f53c5a02` | binary from `dl.min.io` |
 

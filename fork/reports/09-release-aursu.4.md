@@ -75,5 +75,7 @@ found the defect:
 - **Not done:**
   - malformed `FileInfo` from a peer (note 36);
   - the "Upgrade from 2019" 200/403 flake, which may be a real defect in
-    how a node loads bucket metadata;
+    how a node loads bucket metadata. *(Update 2026-11-27: it is a race
+    in the legacy bucket-config migration, left unfixed; the 2019 upgrade
+    test is dropped. Note 38.)*
   - the items offered earlier (report 07).

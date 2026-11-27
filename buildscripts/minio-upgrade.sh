@@ -120,8 +120,8 @@ if [ -n "${OLD_VERSION:-}${OLD_COMMIT:-}" ] && { [ -z "${OLD_VERSION:-}" ] || [ 
 	echo "set OLD_VERSION and OLD_COMMIT together"
 	exit 1
 fi
-OLD_VERSION="${OLD_VERSION:-RELEASE.2019-12-19T22-52-26Z}"
-OLD_COMMIT="${OLD_COMMIT:-586614c73f902085465d07a1f854ca6c1efb9845}"
+OLD_VERSION="${OLD_VERSION:-RELEASE.2025-04-22T22-12-26Z}"
+OLD_COMMIT="${OLD_COMMIT:-0d7408fc9969caf07de6a8c3a84f9fbb10a6739e}"
 
 # The old images are gone from Docker Hub and Quay: build the release from
 # source and wrap it with the repo Dockerfile, tagged as compose.yml expects.
