@@ -2,24 +2,14 @@
 
 trap 'cleanup $LINENO' ERR
 
+# Removes this test's containers, network and volumes (the named data
+# volumes and the anonymous /data ones), and nothing else. The daemon may
+# be shared - a developer's host, a build server - so no host-wide prune.
 # shellcheck disable=SC2120
 cleanup() {
 	MINIO_VERSION=dev /tmp/gopath/bin/docker-compose \
 		-f "buildscripts/upgrade-tests/compose.yml" \
-		down || true
-
-	MINIO_VERSION=dev /tmp/gopath/bin/docker-compose \
-		-f "buildscripts/upgrade-tests/compose.yml" \
-		rm || true
-
-	for volume in $(docker volume ls -q | grep upgrade); do
-		docker volume rm ${volume} || true
-	done
-
-	docker volume prune -f
-	docker system prune -f || true
-	docker volume prune -f || true
-	docker volume rm $(docker volume ls -q -f dangling=true) || true
+		down --volumes --remove-orphans || true
 }
 
 verify_checksum_after_heal() {
@@ -168,7 +158,11 @@ __init__() {
 
 	curl -s http://127.0.0.1:9000/minio-test/to-read/hosts | sha256sum
 
-	MINIO_VERSION=dev /tmp/gopath/bin/docker-compose -f "buildscripts/upgrade-tests/compose.yml" stop
+	# Remove the old-release containers with their anonymous volumes (the
+	# Dockerfile's VOLUME /data, unused here); the named data volumes stay
+	# for the new release. Recreating them in main() would orphan those
+	# anonymous volumes, and cleanup() reaches only the current containers'.
+	MINIO_VERSION=dev /tmp/gopath/bin/docker-compose -f "buildscripts/upgrade-tests/compose.yml" rm --stop --force --volumes
 }
 
 main() {
