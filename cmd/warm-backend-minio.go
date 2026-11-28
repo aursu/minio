@@ -88,6 +88,14 @@ func (m *warmBackendMinIO) PutWithMeta(ctx context.Context, object string, r io.
 		PartSize:             uint64(partSize),
 		DisableContentSha256: true,
 		UserMetadata:         meta,
+		// Ask for CRC32C explicitly. With only TrailingHeaders set, minio-go
+		// from v7.0.95 puts X-Amz-Checksum-Algorithm into the metadata before
+		// it chooses between a single PUT and multipart, then takes that key
+		// for a caller-supplied checksum: a single PUT (an object of one part,
+		// up to 128 MiB here) goes out with no checksum value at all. An
+		// explicit Checksum restores the CRC32C trailer, which the tier
+		// verifies on receipt and stores.
+		Checksum: minio.ChecksumCRC32C,
 	})
 	return remoteVersionID(res.VersionID), m.ToObjectError(err, object)
 }
